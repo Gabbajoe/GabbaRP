@@ -1,6 +1,2 @@
 .DS_Store
 *.bak
-
-# The current icon's rights aren't owned by us -- not for public distribution.
-# Re-add once an original icon exists. See README.md / project notes.
-Icon.png
