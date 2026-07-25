@@ -1,0 +1,17 @@
+## Interface: 11509
+## Title: GabbaRP
+## Notes: Automatic roleplay emotes and flavor lines triggered by your spell casts. Fully editable in-game, for every class.
+## Author: Nils
+## Version: 1.0
+## Category-enUS: Roleplay, Chat
+## IconTexture: Interface\AddOns\GabbaRP\Icon.png
+## SavedVariablesPerCharacter: GabbaRPCharDB
+## OptionalDeps: DeathNotificationLib
+
+Libs\MessageQueue.lua
+Core.lua
+RP_Data.lua
+RP_Core.lua
+RP_Greeting.lua
+RP_Options.lua
+RP_BlizzardOptions.lua
