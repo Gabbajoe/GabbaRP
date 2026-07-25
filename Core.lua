@@ -197,20 +197,30 @@ function ns.GabbaRP_PrintReport()
     ns.GabbaRP_Print("=== end report ===")
 end
 
+local shownChangelogThisSession = false
+
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
-frame:RegisterEvent("PLAYER_LOGIN")
+frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:SetScript("OnEvent", function(self, event, name)
     if event == "ADDON_LOADED" and name == "GabbaRP" then
         GabbaRP_EnsureDefaults()
         ns.GabbaRP_Print("Loaded. Type /gabbarp for commands.")
-    elseif event == "PLAYER_LOGIN" then
-        -- Deferred to PLAYER_LOGIN (not ADDON_LOADED) so the changelog popup, if it
-        -- shows, appears after the world has actually loaded rather than during/before
-        -- the loading screen. RP_Options.lua (loaded after this file) defines the
-        -- function; guarded in case load order or an earlier error ever changes that.
-        if ns.GabbaRP_ShowChangelogIfNeeded then
-            ns.GabbaRP_ShowChangelogIfNeeded()
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        -- Not PLAYER_LOGIN: Blizzard's own UI code closes every UISpecialFrames-registered
+        -- frame (which the changelog popup is, so Escape can dismiss it) as part of its
+        -- loading-screen-transition cleanup right around PLAYER_ENTERING_WORLD. Showing the
+        -- popup at PLAYER_LOGIN (which fires slightly earlier) meant it got shown and then
+        -- immediately closed again by that cleanup before the player ever saw it. A short
+        -- delay after PLAYER_ENTERING_WORLD dodges that race. Guarded to only ever fire
+        -- once per session -- this event also fires on every zone change/instance entry.
+        if not shownChangelogThisSession then
+            shownChangelogThisSession = true
+            C_Timer.After(2, function()
+                if ns.GabbaRP_ShowChangelogIfNeeded then
+                    ns.GabbaRP_ShowChangelogIfNeeded()
+                end
+            end)
         end
     end
 end)

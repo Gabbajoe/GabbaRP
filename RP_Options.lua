@@ -1266,9 +1266,10 @@ local CHANGELOG_VERSION = 1
 -- changelog immediately) without this file needing to load before that logic runs.
 ns.GabbaRP_CHANGELOG_VERSION = CHANGELOG_VERSION
 local CHANGELOG = {
-    [1] = "|cffffd200New:|r optional local-language (non-English) support for every skill, Food/Drink, Death Reactions, and Group Greetings. Off by default -- turn on \"Use local language\" in Settings, then fill in your own translated lines via each Edit button's new Language tab.\n\n" ..
-        "|cffffd200New:|r /gabbarp report, plus /gabbarp triggerdebug, greetdebug and debuglog, for easier bug reporting.\n\n" ..
-        "|cffffd200Changed:|r the skill/Food/Death/Greeting editor popups got a visual overhaul -- horizontal tabs instead of stacked checkboxes, a bigger line list, a confirmation before Reset to Default, and they no longer stack on top of each other or float above every other window.",
+    [1] = "|cffffd200Welcome to GabbaRP v1.0!|r This addon gives your character a voice: automatic roleplay lines and emotes for every class, triggered by your spell casts, fully editable in-game.\n\n" ..
+        "|cffffd200Highlights:|r Self, Public, and Both modes; Death Reactions; Imp Backtalk for Warlocks; Group Greetings; and spam protection you fully control, with sliders for the per-skill cooldown, the global cooldown, and the trigger chance.\n\n" ..
+        "|cffffd200Also included:|r optional local-language support, off by default. Turn on \"Use local language\" in Settings, then add your own translated lines through each Edit button's Language tab.\n\n" ..
+        "|cffffd200For bug reports:|r /gabbarp report prints a copy-pasteable summary, and /gabbarp triggerdebug, greetdebug, and debuglog help track down anything that isn't working as expected.",
 }
 
 local changelogFrame
