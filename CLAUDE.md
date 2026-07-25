@@ -22,6 +22,6 @@ A WoW Classic Era addon: automatic RP flavor lines and emotes triggered by spell
 - German is the working language with this user in conversation; code comments and commit-style content stay in English.
 - Keep the `.toc`'s `## Version`, this README's Changelog section, and `RP_Options.lua`'s in-addon `CHANGELOG` table in sync when shipping a release worth telling users about.
 
-## Known open item
+## Assets
 
-The bundled `Icon.png` is **not committed** to this repo (`.gitignore`) — its rights aren't owned by this project. It still works for local/live use, but a new original icon is needed before this repo's release artifacts (CurseForge package, etc.) ship one.
+`Icon.png` (128x128, in-game `IconTexture`) and the `release/logo/` variants (512/256/128/64) are original AI-generated artwork (comedy/tragedy theater mask), no rights concerns. The full-size source lives at `release/logo/GPT image-2026-07-25-21-30-50.png`.
