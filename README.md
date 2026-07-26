@@ -1,4 +1,4 @@
-# GabbaRP — v1.0
+# GabbaRP — v1.0.1
 
 GabbaRP gives your character a voice. It listens for the spells you cast and, every so often, has your character say or emote something fitting in Say, Emote, Guild, Party or Raid chat — a Warrior taunting before a Charge, a Priest murmuring a prayer before Power Word: Shield, a Warlock's Imp mouthing off in Say chat. Every class is covered, every line is editable in-game, and nothing is sent to chat unless you're actually eligible to see it (no spamming a raid with your Rogue's inner monologue).
 
@@ -38,6 +38,12 @@ Copy this folder to `World of Warcraft/_classic_era_/Interface/AddOns/GabbaRP` a
 Everything else — enabling/disabling individual skills, editing lines, spam-protection sliders, local-language setup — is in **Options > AddOns > GabbaRP**.
 
 ## Changelog
+
+### V1.0.1
+
+- Fixed: a buff landing on you from someone else (another priest's Power Word: Shield, a druid's Mark of the Wild, etc.) no longer made your character react as if you had cast it yourself.
+- New: `%w` placeholder in Death: Guild lines for the deceased's last words (via DeathNotificationLib) — only picked when there actually are last words to show.
+- New: any line can start with `[SAY]`, `[YELL]`, or `[EMOTE]` to override the chat type for just that one line.
 
 ### V1.0
 

@@ -187,11 +187,32 @@ local function ResolveSpellKey(spellName, lang)
     return spellName
 end
 
--- %t/%p are plain gsub substitutions, not string.format -- a user typing a stray "%" in
+-- %t/%p/%w are plain gsub substitutions, not string.format -- a user typing a stray "%" in
 -- their own custom line would otherwise error out of string.format entirely.
-local function ApplyPlaceholders(line, targetName)
+-- Optional per-line chat-type override: a line can start with "[SAY]", "[YELL]", or
+-- "[EMOTE]" (whitespace after the tag is optional -- "[SAY] text" and "[SAY]text" both
+-- work) to say THIS line differently than the skill's normal chat type, e.g. one line
+-- that reads better shouted than emoted. GROUP_ANNOUNCE is deliberately not a valid tag
+-- here -- that chat type is driven entirely by AnnounceGroupCast on cast start, never by
+-- an individual line.
+local VALID_LINE_CHATTYPE_OVERRIDES = { SAY = true, YELL = true, EMOTE = true }
+local function ExtractLineChatTypeOverride(line)
+    local tag, rest = line:match("^%[(%a+)%]%s*(.*)$")
+    if tag and VALID_LINE_CHATTYPE_OVERRIDES[tag:upper()] then
+        return tag:upper(), rest
+    end
+    return nil, line
+end
+
+local function ApplyPlaceholders(line, targetName, lastWords)
     line = line:gsub("%%t", targetName and targetName:match("^[^-]+") or "you")
     line = line:gsub("%%p", UnitExists("pet") and UnitName("pet") or "my pet")
+    -- %w: the deceased's last words, only ever populated for "Death: Guild" (the only
+    -- reaction sourced from DeathNotificationLib's playerData, which is the only place
+    -- last words come from -- Death: Group/Raid fire off the combat log directly and have
+    -- no such data). Falls back to "nothing" so a custom line using %w still reads fine
+    -- when the player never set any.
+    line = line:gsub("%%w", (lastWords and lastWords ~= "") and lastWords or "nothing")
     return line
 end
 
@@ -212,7 +233,7 @@ local function TDebug(spellName, msg)
     end
 end
 
-local function TriggerLine(spellName, targetName, publicChatType)
+local function TriggerLine(spellName, targetName, publicChatType, lastWords)
     local db = GabbaRPCharDB.rp
     if not db.enabled then return end
 
@@ -221,6 +242,34 @@ local function TriggerLine(spellName, targetName, publicChatType)
         TDebug(spellName, "no lines configured")
         return
     end
+
+    -- Partition into %w lines (only make sense when there's an actual last-words string
+    -- to put there) and plain lines. When last words ARE available, only the %w lines are
+    -- eligible -- otherwise a %w line competes on equal footing with plain ones and
+    -- usually loses, so the whole point of writing one rarely pays off. Falls back to the
+    -- plain pool if last words exist but nothing with %w has been authored yet, so Death:
+    -- Guild doesn't go silent just because no %w line exists. GetLines/customLines itself
+    -- still reports the full authored list everywhere else (editor, export, etc.) -- this
+    -- filtering is local to picking a line to actually say right now.
+    local hasLastWords = lastWords and lastWords ~= ""
+    local wLines, plainLines = {}, {}
+    for _, l in ipairs(lines) do
+        if l:find("%w", 1, true) then
+            table.insert(wLines, l)
+        else
+            table.insert(plainLines, l)
+        end
+    end
+    if hasLastWords and #wLines > 0 then
+        lines = wLines
+    else
+        lines = plainLines
+        if #lines == 0 then
+            TDebug(spellName, "no lines configured (only %w lines, no last words)")
+            return
+        end
+    end
+
     if db.disabledSpells[spellName] then
         TDebug(spellName, "skill disabled")
         return
@@ -269,7 +318,23 @@ local function TriggerLine(spellName, targetName, publicChatType)
     end
 
     TDebug(spellName, "fired")
-    local line = ApplyPlaceholders(PickLine(spellName, lines), targetName)
+    local lineChatType, strippedLine = ExtractLineChatTypeOverride(PickLine(spellName, lines))
+    local line = ApplyPlaceholders(strippedLine, targetName, lastWords)
+
+    -- A line's own [SAY]/[YELL]/[EMOTE] tag wins over the skill's normal chat type, with
+    -- the same MessageQueue-availability downgrade GetChatType applies above (Say/Yell
+    -- need a real hardware event to send at all -- see the C_Timer.After comment below --
+    -- so without MessageQueue loaded, an override to either just falls back to Emote
+    -- instead of silently never sending). Not honored when the CALLER forced a specific
+    -- channel (publicChatType, e.g. Create Soulstone's dynamic RAID/PARTY targeting) --
+    -- that's a delivery guarantee the line-level tag must not be able to break.
+    local effectiveChatType = chatType
+    if lineChatType and not publicChatType then
+        effectiveChatType = lineChatType
+        if (effectiveChatType == "SAY" or effectiveChatType == "YELL") and not (MessageQueue and MessageQueue.SendChatMessage) then
+            effectiveChatType = "EMOTE"
+        end
+    end
 
     if db.anim then
         local token = ns.GRP_EmoteTokens[spellName]
@@ -283,11 +348,11 @@ local function TriggerLine(spellName, targetName, publicChatType)
     end
 
     if db.mode == "public" or db.mode == "both" then
-        if (chatType == "SAY" or chatType == "YELL") and MessageQueue and MessageQueue.SendChatMessage then
+        if (effectiveChatType == "SAY" or effectiveChatType == "YELL") and MessageQueue and MessageQueue.SendChatMessage then
             -- Say/Yell need a real hardware event to send at all (see GetChatType above)
             -- -- MessageQueue queues it and flushes on the player's next actual
             -- click/keypress, which satisfies that requirement.
-            MessageQueue.SendChatMessage(line, chatType)
+            MessageQueue.SendChatMessage(line, effectiveChatType)
         else
             -- Deferred by one frame on purpose: TriggerLine can run synchronously inside
             -- the COMBAT_LOG_EVENT_UNFILTERED dispatch (e.g. for a self-cast like Life
@@ -297,7 +362,7 @@ local function TriggerLine(spellName, targetName, publicChatType)
             -- can trip ADDON_ACTION_BLOCKED even though nothing about the call itself is
             -- invalid. Pushing it to the next frame runs it in a clean, untainted context
             -- instead.
-            C_Timer.After(0, function() SendChatMessage(line, chatType) end)
+            C_Timer.After(0, function() SendChatMessage(line, effectiveChatType) end)
         end
     end
 end
@@ -418,6 +483,21 @@ function ns.GabbaRP_HandleCommand(msg)
         end
     elseif cmd == "report" then
         ns.GabbaRP_PrintReport()
+    elseif cmd == "testdeath" then
+        -- Debug helper: fires the exact same Death: Guild dispatch DeathNotificationLib's
+        -- HookOnNewEntry callback would, without needing an actual death to test against --
+        -- handy for testing %w (last words) or the Death: Guild line pool in general.
+        -- Re-parses the raw msg instead of using the already-lowercased arg above, since a
+        -- player name and last words shouldn't be forced to lowercase.
+        local name, lastWords = msg:match("^%S+%s+(%S+)%s*(.-)$")
+        if not name then
+            ns.GabbaRP_Print("Usage: /gabbarp testdeath <name> [last words]")
+        else
+            lastWords = lastWords ~= "" and lastWords or nil
+            local lang = GabbaRPCharDB.rp.localLanguageEnabled and "local" or "en"
+            TriggerLine(ResolveSpellKey("Death: Guild", lang), name, nil, lastWords)
+            ns.GabbaRP_Print(string.format("Simulated Death: Guild for %s (last words: %s)", name, lastWords or "none"))
+        end
     else
         ns.GabbaRP_Print("Commands:")
         ns.GabbaRP_Print("  /gabbarp on | off")
@@ -429,6 +509,7 @@ function ns.GabbaRP_HandleCommand(msg)
         ns.GabbaRP_Print("  /gabbarp triggerdebug on|off  (why a skill did/didn't comment, current: " .. (db.triggerDebugLog and "on" or "off") .. ")")
         ns.GabbaRP_Print("  /gabbarp debuglog [clear]  (persisted debug trail, readable from the saved GabbaRP.lua file)")
         ns.GabbaRP_Print("  /gabbarp report  (copy-pasteable diagnostic summary for bug reports)")
+        ns.GabbaRP_Print("  /gabbarp testdeath <name> [last words]  (simulate a Death: Guild reaction)")
     end
 end
 
@@ -478,7 +559,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
                         -- definition, so there's no group composition to measure (the person who
                         -- died may not even be in your party/raid).
                         local lang = GabbaRPCharDB.rp.localLanguageEnabled and "local" or "en"
-                        TriggerLine(ResolveSpellKey("Death: Guild", lang), playerData.name)
+                        TriggerLine(ResolveSpellKey("Death: Guild", lang), playerData.name, nil, playerData.last_words)
                     end
                 end)
                 if not ok then
@@ -509,8 +590,11 @@ frame:SetScript("OnEvent", function(self, event, ...)
             else
                 TriggerLine(ResolveSpellKey(spellName, ns.GabbaRP_GetGroupLanguage()), destName)
             end
-        elseif subevent == "SPELL_AURA_APPLIED" and destGUID == playerGUID then
-            -- for buff procs like Nightfall/"Shadow Trance" that aren't a cast of your own
+        elseif subevent == "SPELL_AURA_APPLIED" and destGUID == playerGUID and sourceGUID == playerGUID then
+            -- for buff procs like Nightfall/"Shadow Trance" that aren't a cast of your own --
+            -- sourceGUID must ALSO be the player, not just destGUID, otherwise this fires
+            -- whenever anyone else's buff lands on you (e.g. another priest's Power Word:
+            -- Shield/Fortitude), reacting as if you had cast it yourself
             TriggerLine(ResolveSpellKey(spellName, ns.GabbaRP_GetGroupLanguage()))
         elseif subevent == "UNIT_DIED" and destGUID ~= playerGUID and destName then
             -- Party/raid membership MUST be checked before scheduling anything below --

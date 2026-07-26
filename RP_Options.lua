@@ -1260,7 +1260,7 @@ end
 -- anyone behind sees every entry they missed concatenated, not just the latest.
 ----------------------------------------------------------------------
 
-local CHANGELOG_VERSION = 1
+local CHANGELOG_VERSION = 2
 -- Exposed so Core.lua's GabbaRP_EnsureDefaults can stamp brand-new characters as
 -- already-current (a fresh install has nothing to "catch up" on, so it shouldn't see a
 -- changelog immediately) without this file needing to load before that logic runs.
@@ -1270,6 +1270,10 @@ local CHANGELOG = {
         "|cffffd200Highlights:|r Self, Public, and Both modes; Death Reactions; Imp Backtalk for Warlocks; Group Greetings; and spam protection you fully control, with sliders for the per-skill cooldown, the global cooldown, and the trigger chance.\n\n" ..
         "|cffffd200Also included:|r optional local-language support, off by default. Turn on \"Use local language\" in Settings, then add your own translated lines through each Edit button's Language tab.\n\n" ..
         "|cffffd200For bug reports:|r /gabbarp report prints a copy-pasteable summary, and /gabbarp triggerdebug, greetdebug, and debuglog help track down anything that isn't working as expected.",
+    [2] = "|cffffd200GabbaRP v1.0.1|r\n\n" ..
+        "|cffffd200Fixed:|r a buff landing on you from someone else (another priest's Power Word: Shield, a druid's Mark of the Wild, etc.) no longer makes your character react as if you had cast it yourself.\n\n" ..
+        "|cffffd200New:|r use %w in a Death: Guild line to include the deceased's last words. A %w line is only ever picked when there actually are last words to show -- otherwise your normal lines are used instead.\n\n" ..
+        "|cffffd200New:|r any line can start with [SAY], [YELL], or [EMOTE] to say just that one line differently than the skill's usual chat type. Falls back to the skill's normal chat type if the tag is missing or misspelled.",
 }
 
 local changelogFrame
