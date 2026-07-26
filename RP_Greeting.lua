@@ -206,9 +206,17 @@ local function EvaluateRoster()
     local inGroup = IsInGroup() or IsInRaid()
     local currentMembers = SnapshotMembers()
 
-    if inGroup and not wasInGroup then
+    -- "join" is for joining a group that already existed without you -- if you're the
+    -- leader at the first transition into a group, you almost certainly just formed it
+    -- yourself by inviting people, not joined someone else's. Firing "join" there doubled
+    -- up with "welcome" for the very first invitee, greeting the same single person twice
+    -- within a couple seconds. Falling through to the per-member welcome loop instead
+    -- (same as the "already in a group, someone new joined" case) means every initial
+    -- invitee still gets welcomed individually, even if several joined in the same
+    -- settle-delay window.
+    if inGroup and not wasInGroup and not UnitIsGroupLeader("player") then
         SayLine("join", GetTimeOfDay())
-    elseif inGroup and wasInGroup then
+    elseif inGroup then
         local playerName = UnitName("player")
         for name in pairs(currentMembers) do
             if not knownMembers[name] and name ~= playerName then

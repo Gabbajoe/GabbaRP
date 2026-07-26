@@ -1,4 +1,4 @@
-# GabbaRP — v1.0.2
+# GabbaRP — v1.0.3
 
 GabbaRP gives your character a voice. It listens for the spells you cast and, every so often, has your character say or emote something fitting in Say, Emote, Guild, Party or Raid chat — a Warrior taunting before a Charge, a Priest murmuring a prayer before Power Word: Shield, a Warlock's Imp mouthing off in Say chat. Every class is covered, every line is editable in-game, and nothing is sent to chat unless you're actually eligible to see it (no spamming a raid with your Rogue's inner monologue).
 
@@ -45,6 +45,10 @@ Blizzard requires a real click or keypress before an addon is allowed to send a 
 This only matters if you have a skill configured to send **Say** or **Yell** specifically (Emote, the default for most skills, isn't affected). GabbaRP shows a one-time popup at login if any of your currently enabled skills are set that way, as a reminder. Switch the skill back to Emote in the line editor if this bothers you.
 
 ## Changelog
+
+### V1.0.3
+
+- Fixed: forming a group by inviting someone yourself no longer says both the generic "Join" greeting AND the personal welcome for that first invitee — if you're the group leader, only the personal welcome fires.
 
 ### V1.0.2
 

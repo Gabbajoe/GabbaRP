@@ -1286,7 +1286,7 @@ end
 -- anyone behind sees every entry they missed concatenated, not just the latest.
 ----------------------------------------------------------------------
 
-local CHANGELOG_VERSION = 3
+local CHANGELOG_VERSION = 4
 -- Exposed so Core.lua's GabbaRP_EnsureDefaults can stamp brand-new characters as
 -- already-current (a fresh install has nothing to "catch up" on, so it shouldn't see a
 -- changelog immediately) without this file needing to load before that logic runs.
@@ -1308,6 +1308,8 @@ local CHANGELOG = {
         "|cffffd200New:|r a one-time login warning if you have a skill set to Say/Yell chat, explaining why one of your clicks can occasionally get \"eaten\" (an unavoidable side effect of how Say/Yell messages have to be sent).\n\n" ..
         "|cffffd200Fixed:|r removed two Priest entries that don't actually exist on this client (Shadowguard, Shadow Word: Death).\n\n" ..
         "|cffffd200Changed:|r the editor popups (Skills, Food/Drink, Death Reactions, Greetings) are now a consistent size, with no more overlapping buttons or wasted empty space.",
+    [4] = "|cffffd200GabbaRP v1.0.3|r\n\n" ..
+        "|cffffd200Fixed:|r forming a group by inviting someone yourself no longer says both the generic \"Join\" greeting AND the personal welcome for that first invitee -- if you're the group leader, only the personal welcome fires.",
 }
 
 local changelogFrame
