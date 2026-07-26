@@ -468,10 +468,6 @@ ns.GRP_Spells = {
         "your power is mine to take.",
         "burning through your reserves.",
     },
-    ["Shadowguard"] = {
-        "touch me and pay for it.",
-        "the shadows bite back.",
-    },
     ["Touch of Weakness"] = {
         "that touch will cost you.",
         "weakness, delivered by hand.",
@@ -483,10 +479,6 @@ ns.GRP_Spells = {
     ["Mind Blast"] = {
         "a little pressure, right there.",
         "feel that pushing in?",
-    },
-    ["Shadow Word: Death"] = {
-        "some things just need to end.",
-        "the shadow claims you.",
     },
     ["Vampiric Embrace"] = {
         "your suffering, my strength.",
@@ -531,6 +523,26 @@ ns.GRP_Spells = {
     ["Abolish Disease"] = {
         "that sickness won't linger.",
         "cleansing you now.",
+    },
+    ["Inner Focus"] = {
+        "this one costs nothing but will.",
+        "focus sharpens the mind wonderfully.",
+    },
+    ["Desperate Prayer"] = {
+        "not today. not like this.",
+        "a prayer for one more moment.",
+    },
+    ["Starshards"] = {
+        "the stars have teeth too.",
+        "silence, courtesy of the night sky.",
+    },
+    ["Elune's Grace"] = {
+        "the goddess lends her grace.",
+        "Elune watches your steps now.",
+    },
+    ["Fear Ward"] = {
+        "no fear finds purchase here.",
+        "steady now, nothing can shake you.",
     },
 
     -- Warlock
@@ -1131,11 +1143,9 @@ ns.GRP_SpellClass = {
     ["Cure Disease"] = "PRIEST",
     ["Levitate"] = "PRIEST",
     ["Mana Burn"] = "PRIEST",
-    ["Shadowguard"] = "PRIEST",
     ["Touch of Weakness"] = "PRIEST",
     ["Dispel Magic"] = "PRIEST",
     ["Mind Blast"] = "PRIEST",
-    ["Shadow Word: Death"] = "PRIEST",
     ["Vampiric Embrace"] = "PRIEST",
     ["Resurrection"] = "PRIEST",
     ["Prayer of Healing"] = "PRIEST",
@@ -1147,6 +1157,11 @@ ns.GRP_SpellClass = {
     ["Mind Control"] = "PRIEST",
     ["Holy Fire"] = "PRIEST",
     ["Abolish Disease"] = "PRIEST",
+    ["Inner Focus"] = "PRIEST",
+    ["Desperate Prayer"] = "PRIEST",
+    ["Starshards"] = "PRIEST",
+    ["Elune's Grace"] = "PRIEST",
+    ["Fear Ward"] = "PRIEST",
 
     ["Fear"] = "WARLOCK",
     ["Corruption"] = "WARLOCK",
@@ -1291,12 +1306,70 @@ ns.GRP_EmoteTokens = {
     ["Taunt"] = "TAUNT",
     ["Charge"] = "CHARGE",
     ["Vanish"] = "SNEAK",
-    ["Fear"] = "BOGGLE",
-    ["Psychic Scream"] = "BOGGLE",
-    ["Howl of Terror"] = "BOGGLE",
+    -- THREATEN, not BOGGLE -- these are cast FROM the caster's perspective (they're
+    -- instilling the fear, not experiencing it), so a menacing/intimidating gesture fits
+    -- better than a startled one.
+    ["Fear"] = "THREATEN",
+    ["Psychic Scream"] = "THREATEN",
+    ["Howl of Terror"] = "THREATEN",
     ["Death: Group"] = "MOURN",
     ["Death: Raid"] = "MOURN",
     ["Death: Guild"] = "MOURN",
+    -- Aggressive Warrior shouts, from the caster's own perspective (see the THREATEN note
+    -- above) -- a battle roar fits a Warrior riling themselves or the enemy up.
+    ["Berserker Rage"] = "ROAR",
+    ["Bloodrage"] = "ROAR",
+    ["Death Wish"] = "ROAR",
+    ["Intimidating Shout"] = "ROAR",
+    ["Demoralizing Shout"] = "ROAR",
+    ["Recklessness"] = "FLEX",
+    ["Retaliation"] = "FLEX",
+    ["Shield Wall"] = "FLEX",
+    -- CC/utility spells that target someone specific -- a pointing gesture fits the act
+    -- of singling that target out.
+    ["Shackle Undead"] = "POINT",
+    ["Mind Control"] = "POINT",
+    ["Hunter's Mark"] = "POINT",
+    ["Distracting Shot"] = "POINT",
+    ["Faerie Fire"] = "POINT",
+    -- Druid melee (Bear/Cat form) -- a roar fits the ferocity.
+    ["Bash"] = "ROAR",
+    ["Maul"] = "ROAR",
+    ["Claw"] = "ROAR",
+    ["Rip"] = "ROAR",
+    ["Ferocious Bite"] = "ROAR",
+
+    -- Local-language (LOCAL) mirrors -- same animations as their English counterparts
+    -- above. ResolveSpellKey can hand TriggerLine a "(LOCAL)"-suffixed spellName, and this
+    -- table is looked up by that exact key, so every entry above needs one of these or the
+    -- animation silently doesn't play for a local-language cast.
+    ["Taunt (LOCAL)"] = "TAUNT",
+    ["Charge (LOCAL)"] = "CHARGE",
+    ["Vanish (LOCAL)"] = "SNEAK",
+    ["Fear (LOCAL)"] = "THREATEN",
+    ["Psychic Scream (LOCAL)"] = "THREATEN",
+    ["Howl of Terror (LOCAL)"] = "THREATEN",
+    ["Death: Group (LOCAL)"] = "MOURN",
+    ["Death: Raid (LOCAL)"] = "MOURN",
+    ["Death: Guild (LOCAL)"] = "MOURN",
+    ["Berserker Rage (LOCAL)"] = "ROAR",
+    ["Bloodrage (LOCAL)"] = "ROAR",
+    ["Death Wish (LOCAL)"] = "ROAR",
+    ["Intimidating Shout (LOCAL)"] = "ROAR",
+    ["Demoralizing Shout (LOCAL)"] = "ROAR",
+    ["Recklessness (LOCAL)"] = "FLEX",
+    ["Retaliation (LOCAL)"] = "FLEX",
+    ["Shield Wall (LOCAL)"] = "FLEX",
+    ["Shackle Undead (LOCAL)"] = "POINT",
+    ["Mind Control (LOCAL)"] = "POINT",
+    ["Hunter's Mark (LOCAL)"] = "POINT",
+    ["Distracting Shot (LOCAL)"] = "POINT",
+    ["Faerie Fire (LOCAL)"] = "POINT",
+    ["Bash (LOCAL)"] = "ROAR",
+    ["Maul (LOCAL)"] = "ROAR",
+    ["Claw (LOCAL)"] = "ROAR",
+    ["Rip (LOCAL)"] = "ROAR",
+    ["Ferocious Bite (LOCAL)"] = "ROAR",
 }
 
 -- The Imp's own real voice lines, grouped by which command provoked them -- used to match

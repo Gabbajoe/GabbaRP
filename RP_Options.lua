@@ -259,7 +259,12 @@ end
 
 local function CreateEditorFrame()
     local f = CreateFrame("Frame", "GRPLineEditor", UIParent, "BasicFrameTemplateWithInset")
-    f:SetSize(420, 460)
+    -- 540, not 460: this frame is reused for both plain skill popups AND Food/Drink/Death
+    -- Reaction popups (allowLanguage=true, which adds the whole Language row above "Send
+    -- as:"). 460 had just enough slack for the plain case, but the language row plus the
+    -- taller 230px line scroll pushed the Add box below the frame's bottom edge for the
+    -- allowLanguage case specifically.
+    f:SetSize(420, 540)
     f:SetPoint("CENTER")
     f:SetMovable(true)
     f:EnableMouse(true)
@@ -298,7 +303,10 @@ local function CreateEditorFrame()
     f.chatLabel = chatLabel
 
     editorChatTabs = GabbaRP_NewTabStrip(f, CHAT_TYPES, SelectEditorChatType)
-    editorChatTabs[1].btn:SetPoint("TOPLEFT", chatLabel, "BOTTOMLEFT", 0, -6)
+    -- -14, not -6: the button row needs to clear resetBtn's bottom edge (below), which
+    -- sits roughly level with this whole row since it's anchored off hint, not chatLabel --
+    -- too small a gap here and the two visibly overlap (Reset to Default over Announce).
+    editorChatTabs[1].btn:SetPoint("TOPLEFT", chatLabel, "BOTTOMLEFT", 0, -14)
 
     local chatDesc = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     chatDesc:SetPoint("TOPLEFT", editorChatTabs[1].btn, "BOTTOMLEFT", 0, -6)
@@ -363,8 +371,13 @@ local function CreateEditorFrame()
 
     local scrollFrame = CreateFrame("ScrollFrame", "GRPLineEditorScroll", f, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", linesLabel, "BOTTOMLEFT", 0, -6)
-    scrollFrame:SetPoint("RIGHT", -30, 0)
-    scrollFrame:SetHeight(190)
+    -- Two-point anchor (not a fixed SetHeight) so this fills exactly whatever space is
+    -- actually available between the lines label and the Add row, regardless of whether
+    -- this popup has the extra Language row above "Send as:" (Food/Drink/Death Reactions)
+    -- or not (plain skills) -- fixed-height guesses kept either overflowing past the
+    -- frame's bottom edge or leaving a dead gap above the Add box, depending on which
+    -- popup variant. 60px reserves room for the Add box/button below.
+    scrollFrame:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -30, 60)
 
     local scrollChild = CreateFrame("Frame", nil, scrollFrame)
     scrollChild:SetWidth(360)
@@ -534,7 +547,9 @@ end
 
 local function CreateGreetingEditorFrame()
     local f = CreateFrame("Frame", "GRPGreetingLineEditor", UIParent, "BasicFrameTemplateWithInset")
-    f:SetSize(420, 430)
+    -- Same 420x540 as CreateEditorFrame (skill/Food/Drink/Death Reactions popup) -- all
+    -- editor popups should be visually consistent in size, not just internally correct.
+    f:SetSize(420, 540)
     f:SetPoint("CENTER")
     f:SetMovable(true)
     f:EnableMouse(true)
@@ -587,8 +602,11 @@ local function CreateGreetingEditorFrame()
 
     local scrollFrame = CreateFrame("ScrollFrame", "GRPGreetingLineEditorScroll", f, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", linesLabel, "BOTTOMLEFT", 0, -6)
-    scrollFrame:SetPoint("RIGHT", -30, 0)
-    scrollFrame:SetHeight(140)
+    -- Two-point anchor, not a fixed SetHeight -- same reasoning as CreateEditorFrame's
+    -- scrollFrame: fills exactly the space actually available instead of guessing a pixel
+    -- count. 100px reserved here (vs. that one's 60px) because this popup stacks BOTH the
+    -- Add row AND the "Reset This Time Slot" button below the scroll area, not just Add.
+    scrollFrame:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -30, 100)
 
     local scrollChild = CreateFrame("Frame", nil, scrollFrame)
     scrollChild:SetWidth(360)
@@ -1055,12 +1073,20 @@ local function BuildExportText()
     local _, playerClass = UnitClass("player")
     local names = {}
     for spellName, class in pairs(ns.GRP_SpellClass) do
-        if class == playerClass and not SPELL_LIST_EXCLUDE[spellName] then
+        if class == playerClass and not SPELL_LIST_EXCLUDE[spellName] and not IsLocalKey(spellName) then
             table.insert(names, spellName)
         end
     end
     table.sort(names)
-    for _, name in ipairs(names) do emitSpell(name) end
+    -- Emits each skill's "(LOCAL)" sibling right after it too, synthesized as name .. "
+    -- (LOCAL)" -- GRP_SpellClass never actually contains that suffixed key for regular
+    -- class skills (GabbaRP ships English-only; local-language content is something each
+    -- user fills in themselves), so relying on it being already present in the table
+    -- would silently skip every class skill's local-language export.
+    for _, name in ipairs(names) do
+        emitSpell(name)
+        emitSpell(name .. " (LOCAL)")
+    end
 
     emitSpell("Food")
     emitSpell("Drink")
@@ -1068,10 +1094,6 @@ local function BuildExportText()
     emitSpell("Death: Group")
     emitSpell("Death: Raid")
     emitSpell("Death: Guild")
-    -- Local-language universal entries -- the per-class loop above already swept up any
-    -- "(LOCAL)" skill keys for your class (they're tagged the same class as their
-    -- English counterparts), but "ALL"-class ones need the same explicit treatment
-    -- English gets.
     emitSpell("Food (LOCAL)")
     emitSpell("Drink (LOCAL)")
     emitSpell("Food and Drink (LOCAL)")
@@ -1139,7 +1161,11 @@ local function ApplyImport(blocks)
             else
                 table.insert(skipped, b.name)
             end
-        elseif ns.GRP_SpellClass[b.name] then
+        elseif ns.GRP_SpellClass[b.name] or (IsLocalKey(b.name) and ns.GRP_SpellClass[b.name:gsub(" %(LOCAL%)$", "")]) then
+            -- The second condition covers a class skill's synthesized "(LOCAL)" key (see
+            -- BuildExportText/BuildSpellList above) -- GRP_SpellClass itself never
+            -- contains that suffixed key directly for regular class skills, only its base
+            -- EN name, so validating against b.name alone would reject every one of them.
             GabbaRPCharDB.rp.customLines[b.name] = b.lines
             if b.chatType then
                 GabbaRPCharDB.rp.customChatType[b.name] = b.chatType
@@ -1260,7 +1286,7 @@ end
 -- anyone behind sees every entry they missed concatenated, not just the latest.
 ----------------------------------------------------------------------
 
-local CHANGELOG_VERSION = 2
+local CHANGELOG_VERSION = 3
 -- Exposed so Core.lua's GabbaRP_EnsureDefaults can stamp brand-new characters as
 -- already-current (a fresh install has nothing to "catch up" on, so it shouldn't see a
 -- changelog immediately) without this file needing to load before that logic runs.
@@ -1274,6 +1300,14 @@ local CHANGELOG = {
         "|cffffd200Fixed:|r a buff landing on you from someone else (another priest's Power Word: Shield, a druid's Mark of the Wild, etc.) no longer makes your character react as if you had cast it yourself.\n\n" ..
         "|cffffd200New:|r use %w in a Death: Guild line to include the deceased's last words. A %w line is only ever picked when there actually are last words to show -- otherwise your normal lines are used instead.\n\n" ..
         "|cffffd200New:|r any line can start with [SAY], [YELL], or [EMOTE] to say just that one line differently than the skill's usual chat type. Falls back to the skill's normal chat type if the tag is missing or misspelled.",
+    [3] = "|cffffd200GabbaRP v1.0.2|r\n\n" ..
+        "|cffffd200New:|r flavor lines for five Priest racials/talent that were missing entirely -- Fear Ward, Desperate Prayer, Starshards, Elune's Grace, and Inner Focus.\n\n" ..
+        "|cffffd200New:|r character animations for more skills -- Warrior war cries and self-buffs, Druid melee, and several CC/utility spells (Shackle Undead, Mind Control, Hunter's Mark, Distracting Shot, Faerie Fire).\n\n" ..
+        "|cffffd200Changed:|r Fear, Psychic Scream, and Howl of Terror now play a menacing gesture instead of a startled one -- you're the one causing the fear, not feeling it.\n\n" ..
+        "|cffffd200Fixed:|r the Local Language skill list was empty for every class -- it now correctly lists every skill, and Export/Import handles local-language lines properly too.\n\n" ..
+        "|cffffd200New:|r a one-time login warning if you have a skill set to Say/Yell chat, explaining why one of your clicks can occasionally get \"eaten\" (an unavoidable side effect of how Say/Yell messages have to be sent).\n\n" ..
+        "|cffffd200Fixed:|r removed two Priest entries that don't actually exist on this client (Shadowguard, Shadow Word: Death).\n\n" ..
+        "|cffffd200Changed:|r the editor popups (Skills, Food/Drink, Death Reactions, Greetings) are now a consistent size, with no more overlapping buttons or wasted empty space.",
 }
 
 local changelogFrame
@@ -1396,11 +1430,20 @@ function ns.GabbaRP_BuildSkillsPanel(parent, lang)
         if spellListBuilt then return end
         spellListBuilt = true
 
+        -- The "(LOCAL)" list is synthesized from the EN class-skill list (base name +
+        -- " (LOCAL)") rather than requiring GRP_SpellClass to already contain that
+        -- suffixed key. GabbaRP ships English-only by design -- no "(LOCAL)" keys are
+        -- pre-seeded in GRP_SpellClass for regular class skills, only for the universal
+        -- Food/Drink/Death entries (see SPELL_LIST_EXCLUDE above and BuildExportText's
+        -- hardcoded emitSpell calls). Without this, the Local Language tab showed nothing
+        -- to translate for any class, and a character's already-existing custom (LOCAL)
+        -- line data (e.g. merged in from elsewhere) had no way to surface in the UI or in
+        -- Export/Import, since both are driven by this same class-skill list.
         local names = {}
         for spellName, class in pairs(ns.GRP_SpellClass) do
             if (class == playerClass or class == "ALL") and not SPELL_LIST_EXCLUDE[spellName]
-                and IsLocalKey(spellName) == (lang == "local") then
-                table.insert(names, spellName)
+                and not IsLocalKey(spellName) then
+                table.insert(names, lang == "local" and (spellName .. " (LOCAL)") or spellName)
             end
         end
         table.sort(names)

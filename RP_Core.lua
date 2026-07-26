@@ -535,9 +535,42 @@ local function MatchImpCategory(text)
     return "Imp: Gibberish"
 end
 
+StaticPopupDialogs["GABBARP_SAYYELL_WARNING"] = {
+    text = "|cffffd200GabbaRP|r\n\n|cffff8800Heads up:|r you have a skill set to Say/Yell chat.\n\nSending a Say/Yell message this way needs a real click or keypress, so it's queued and sent on your very next one. For mouse players, that means one click (e.g. your next action bar press) gets eaten by this instead of doing what you clicked.\n\nSwitch the skill to Emote in the editor if that bothers you.",
+    button1 = "Got it",
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
+-- Warns once per login (as a popup, not a chat line that's easy to miss/scroll past) if
+-- the Say/Yell workaround (Libs/MessageQueue.lua) is actually going to matter for this
+-- character right now -- i.e. at least one of their own class's enabled skills currently
+-- resolves to Say or Yell. That workaround needs a real click/keypress to legally send a
+-- chat message Blizzard didn't originate from one, so it grabs the player's very next
+-- click/keypress ANYWHERE on screen to use as that trigger -- for a mouse player, that
+-- means one click that was meant for something else (like the next action bar button)
+-- gets eaten instead. Silent when nothing's actually configured for Say/Yell, since the
+-- workaround only ever runs when a Say/Yell line can fire.
+local function WarnIfSayYellConfigured()
+    local db = GabbaRPCharDB.rp
+    local _, playerClass = UnitClass("player")
+    for spellName, class in pairs(ns.GRP_SpellClass) do
+        if class == playerClass and not db.disabledSpells[spellName] then
+            local ct = GetChatType(spellName)
+            if ct == "SAY" or ct == "YELL" then
+                StaticPopup_Show("GABBARP_SAYYELL_WARNING")
+                return
+            end
+        end
+    end
+end
+
 frame:SetScript("OnEvent", function(self, event, ...)
     if event == "PLAYER_LOGIN" then
         playerGUID = UnitGUID("player")
+        WarnIfSayYellConfigured()
 
         -- Guild death reactions ride on DeathNotificationLib (a separate, optional addon
         -- -- Deathlog and others already depend on it) instead of anything homegrown: it's
