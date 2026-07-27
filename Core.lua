@@ -67,6 +67,18 @@ local CHAR_DB_DEFAULTS = {
         triggerChance = ns.GRP_DEFAULT_TRIGGER_CHANCE, -- percent chance a line actually fires once eligible
         customLines = {},
         customChatType = {},
+        -- Per-spell overrides for the "spammy vs. never-throttle" gate (RP_Core.lua's
+        -- PassesGlobalGate/bypassesGlobalGate check), editable via the line editor.
+        -- customSkipGate[name] = true/false always wins over ns.GRP_SkipGlobalGate's
+        -- code default once set (nil = not touched, defers to the code default).
+        -- customInterval[name] = a number overrides ns.GRP_SpellInterval's code default
+        -- ("every Nth cast" instead of the normal cooldown); nil defers to the code
+        -- default. There's deliberately no way to override an existing code-default
+        -- interval back OFF via this table alone -- customSkipGate covers "never
+        -- throttle this" already, and that's the only override direction actually
+        -- requested.
+        customSkipGate = {},
+        customInterval = {},
         -- If a guildmate who dies is also in your current party/raid, guild chat (via
         -- DeathNotificationLib, a few seconds later) will already cover it -- skip the
         -- immediate "Death: Group"/"Death: Raid" reaction so the same death isn't
@@ -131,11 +143,23 @@ end
 -- friend's own copy of this addon) is -- every migration it missed replays in sequence on
 -- next load. Old steps are safe to leave here indefinitely; they're cheap and only run for
 -- characters that still need them.
-local CHAR_SCHEMA_VERSION = 1
+local CHAR_SCHEMA_VERSION = 2
 
 local MIGRATIONS = {
-    -- [2] = function(db) ... end,  -- next migration goes here, paired with bumping
-    -- CHAR_SCHEMA_VERSION above to 2.
+    -- The static "Party"/"Raid" chat-type buttons were removed from the line editor --
+    -- both dynamic "Group Start"/"Group Success" types auto-pick whichever you're
+    -- actually in, covering what a static choice used to be for. Any per-character
+    -- override that was still literally "PARTY"/"RAID" would otherwise keep working
+    -- exactly as before (SendChatMessage still accepts those strings) but could no
+    -- longer be RE-selected from the UI -- remapped to the closest equivalent instead
+    -- of leaving it as an orphaned, no-longer-visible choice.
+    [2] = function(db)
+        for spellName, chatType in pairs(db.rp.customChatType) do
+            if chatType == "PARTY" or chatType == "RAID" then
+                db.rp.customChatType[spellName] = "GROUP_SUCCESS"
+            end
+        end
+    end,
 }
 
 local function RunMigrations(db, isNewCharacter)

@@ -81,14 +81,18 @@ local SOLO_LANGUAGES = {
 -- RP_Core.lua.
 -- "label" is the full description shown in the editor (below the tab row, for whichever
 -- tab is currently selected); "short"/"width" size the tab button itself.
+-- No standalone "Party"/"Raid" entries -- both dynamic Group types below auto-pick
+-- whichever you're actually in, which covers what a static Party/Raid choice used to
+-- be for. A specific LINE can still be forced to a fixed Party/Raid channel via the
+-- "[PARTY]"/"[RAID]" per-line tag (ExtractLineChatTypeOverride, RP_Core.lua) if that's
+-- ever genuinely needed.
 local CHAT_TYPES = {
     { key = "EMOTE", short = "Emote", width = 60, label = "Emote (/me), third person, e.g. \"casts a shadow bolt\"" },
     { key = "SAY", short = "Say", width = 44, label = "Say" },
     { key = "YELL", short = "Yell", width = 44, label = "Yell" },
-    { key = "PARTY", short = "Party", width = 50, label = "Party" },
-    { key = "RAID", short = "Raid", width = 46, label = "Raid" },
     { key = "GUILD", short = "Guild", width = 50, label = "Guild" },
-    { key = "GROUP_ANNOUNCE", short = "Announce", width = 78, label = "Group Announcement (on cast start, always sent)" },
+    { key = "GROUP_ANNOUNCE", short = "Group Start", width = 90, label = "Party or Raid chat (whichever you're in), right when the cast starts -- always sent, ignores cooldown/gate" },
+    { key = "GROUP_SUCCESS", short = "Group Success", width = 100, label = "Party or Raid chat (whichever you're in), once the cast succeeds -- normal cooldown/gate rules apply" },
 }
 
 local GREETING_TIME_SLOTS = {
@@ -248,12 +252,30 @@ local function SelectEditorChatType(chatType)
     SyncEditorChatType(chatType)
 end
 
+-- Reflects the EFFECTIVE state (override if set, else the code default from
+-- RP_Data.lua) into the "Always react"/"React every N casts" controls -- same
+-- override-wins-over-default relationship customChatType already has with
+-- GRP_SpellChatType, just for the spam-gate instead of the send-as channel.
+local function SyncEditorFrequency(spellName)
+    local db = GabbaRPCharDB.rp
+    -- Same default rule the actual dispatch uses (ns.GabbaRP_DefaultSkipGate,
+    -- RP_Core.lua), so this checkbox is never out of sync with what really happens --
+    -- e.g. Death/Imp reactions and Group Start spells now correctly show "checked" by
+    -- default instead of looking unchecked despite always bypassing the gate.
+    local skipGate = ns.GabbaRP_DefaultSkipGate(spellName, GetEffectiveChatType(spellName))
+    if db.customSkipGate[spellName] ~= nil then skipGate = db.customSkipGate[spellName] end
+    editorFrame.freqAlwaysCB:SetChecked(skipGate and true or false)
+    editorFrame.freqIntervalBox:SetEnabled(not skipGate)
+    editorFrame.freqIntervalBox:SetText(tostring(db.customInterval[spellName] or ns.GRP_SpellInterval and ns.GRP_SpellInterval[spellName] or ""))
+end
+
 local function SelectEditorLang(lang)
     editorLang = lang
     editorSpellName = ComputeEditorSpellName()
     editorFrame.title:SetText(editorSpellName)
     GabbaRP_SyncTabStrip(editorLangTabs, editorLang)
     SyncEditorChatType(GetEffectiveChatType(editorSpellName))
+    SyncEditorFrequency(editorSpellName)
     RefreshEditorRows()
 end
 
@@ -298,14 +320,55 @@ local function CreateEditorFrame()
     editorLangTabs[1].btn:SetPoint("TOPLEFT", langLabel, "BOTTOMLEFT", 0, -6)
     f.langLabel = langLabel
 
+    -- Independent of "Send as:" (a spell reacts the same amount regardless of which
+    -- channel it's sent to), so this sits in its own row above that section entirely
+    -- rather than under it. Owns the language-row toggle that chatLabel used to have --
+    -- chatLabel now anchors off this section's bottom instead, at a fixed offset.
+    local freqLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    freqLabel:SetText("Reaction frequency:")
+    f.freqLabel = freqLabel
+
+    local freqAlwaysCB = GabbaRP_NewCheckbox(f, "Always react (skip cooldown/spam-gate)")
+    freqAlwaysCB:SetPoint("TOPLEFT", freqLabel, "BOTTOMLEFT", -2, -6)
+    freqAlwaysCB:SetScript("OnClick", function(self)
+        GabbaRPCharDB.rp.customSkipGate[editorSpellName] = self:GetChecked() and true or false
+        SyncEditorFrequency(editorSpellName)
+    end)
+    f.freqAlwaysCB = freqAlwaysCB
+
+    local freqIntervalLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    freqIntervalLabel:SetPoint("TOPLEFT", freqAlwaysCB, "BOTTOMLEFT", 2, -8)
+    freqIntervalLabel:SetText("React every")
+
+    local freqIntervalBox = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+    freqIntervalBox:SetSize(30, 20)
+    freqIntervalBox:SetPoint("LEFT", freqIntervalLabel, "RIGHT", 8, 0)
+    freqIntervalBox:SetAutoFocus(false)
+    freqIntervalBox:SetNumeric(true)
+    freqIntervalBox:SetMaxLetters(2)
+    f.freqIntervalBox = freqIntervalBox
+
+    local freqIntervalHint = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    freqIntervalHint:SetPoint("LEFT", freqIntervalBox, "RIGHT", 8, 0)
+    freqIntervalHint:SetText("casts (blank = default)")
+
+    local function SaveFreqInterval(self)
+        local text = self:GetText()
+        GabbaRPCharDB.rp.customInterval[editorSpellName] = (text ~= "" and tonumber(text)) or nil
+        SyncEditorFrequency(editorSpellName)
+    end
+    freqIntervalBox:SetScript("OnEnterPressed", function(self) SaveFreqInterval(self) self:ClearFocus() end)
+    freqIntervalBox:SetScript("OnEditFocusLost", SaveFreqInterval)
+
     local chatLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     chatLabel:SetText("Send as:")
+    chatLabel:SetPoint("TOPLEFT", freqIntervalLabel, "BOTTOMLEFT", -2, -14)
     f.chatLabel = chatLabel
 
     editorChatTabs = GabbaRP_NewTabStrip(f, CHAT_TYPES, SelectEditorChatType)
     -- -14, not -6: the button row needs to clear resetBtn's bottom edge (below), which
-    -- sits roughly level with this whole row since it's anchored off hint, not chatLabel --
-    -- too small a gap here and the two visibly overlap (Reset to Default over Announce).
+    -- sits level with this whole row since it's anchored off chatLabel's own TOP -- too
+    -- small a gap here and the two visibly overlap (Reset to Default over Announce).
     editorChatTabs[1].btn:SetPoint("TOPLEFT", chatLabel, "BOTTOMLEFT", 0, -14)
 
     local chatDesc = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -314,39 +377,45 @@ local function CreateEditorFrame()
     chatDesc:SetJustifyH("LEFT")
     f.chatDesc = chatDesc
 
-    -- chatLabel's anchor toggles between two fixed points depending on whether the
-    -- language row above it is shown -- everything below (chat tabs, lines, add/reset)
-    -- is anchored relative to chatLabel or its descendants, so this single toggle is
-    -- enough to reflow the whole popup instead of hiding-but-leaving-a-gap.
+    -- freqLabel's anchor toggles between two fixed points depending on whether the
+    -- language row above it is shown -- everything below (frequency controls, chat
+    -- tabs, lines, add/reset) is anchored relative to freqLabel or its descendants, so
+    -- this single toggle is enough to reflow the whole popup instead of hiding-but-
+    -- leaving-a-gap.
     function f.LayoutForLanguage(allowLanguage)
-        chatLabel:ClearAllPoints()
+        freqLabel:ClearAllPoints()
         if allowLanguage then
             langLabel:Show()
             for _, e in ipairs(editorLangTabs) do e.btn:Show() end
-            chatLabel:SetPoint("TOPLEFT", editorLangTabs[1].btn, "BOTTOMLEFT", 0, -18)
+            freqLabel:SetPoint("TOPLEFT", editorLangTabs[1].btn, "BOTTOMLEFT", 0, -18)
         else
             langLabel:Hide()
             for _, e in ipairs(editorLangTabs) do e.btn:Hide() end
-            chatLabel:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0, -12)
+            freqLabel:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0, -12)
         end
     end
 
-    -- Top-right, roughly level with "Send as:" -- out of the vertical stack entirely so
-    -- the lines list below can use that space instead. Confirms first (StaticPopup) since
-    -- this discards every custom line/chat-type override for the skill with no undo.
+    -- Anchored to chatLabel's own TOP (not a fixed offset off hint) so it tracks
+    -- chatLabel's row exactly regardless of how tall the frequency section above ends
+    -- up being, and RIGHT off hint for the same horizontal position as before -- a
+    -- frame can take one point from each axis like this as long as they don't conflict.
     local resetBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     resetBtn:SetSize(140, 22)
-    resetBtn:SetPoint("TOPRIGHT", hint, "BOTTOMRIGHT", 0, -12)
+    resetBtn:SetPoint("TOP", chatLabel, "TOP", 0, 0)
+    resetBtn:SetPoint("RIGHT", hint, "RIGHT", 0, 0)
     resetBtn:SetText("Reset to Default")
     resetBtn:SetScript("OnClick", function()
         StaticPopupDialogs["GABBARP_CONFIRM_RESET_LINES"] = {
-            text = "Reset \"" .. editorSpellName .. "\" to its default lines and chat type?\n\n|cffff4444This discards any custom edits and cannot be undone.|r",
+            text = "Reset \"" .. editorSpellName .. "\" to its default lines, chat type, and reaction frequency?\n\n|cffff4444This discards any custom edits and cannot be undone.|r",
             button1 = "Reset",
             button2 = "Cancel",
             OnAccept = function()
                 GabbaRPCharDB.rp.customLines[editorSpellName] = nil
                 GabbaRPCharDB.rp.customChatType[editorSpellName] = nil
+                GabbaRPCharDB.rp.customSkipGate[editorSpellName] = nil
+                GabbaRPCharDB.rp.customInterval[editorSpellName] = nil
                 SyncEditorChatType(ns.GRP_SpellChatType[editorSpellName] or "EMOTE")
+                SyncEditorFrequency(editorSpellName)
                 RefreshEditorRows()
                 FlashEditorSaved()
             end,
@@ -433,6 +502,7 @@ local function ShowLineEditor(spellName, allowLanguage)
         GabbaRP_SyncTabStrip(editorLangTabs, editorLang)
     end
     SyncEditorChatType(GetEffectiveChatType(editorSpellName))
+    SyncEditorFrequency(editorSpellName)
     RefreshEditorRows()
     editorFrame:Show()
 end
@@ -1286,7 +1356,7 @@ end
 -- anyone behind sees every entry they missed concatenated, not just the latest.
 ----------------------------------------------------------------------
 
-local CHANGELOG_VERSION = 4
+local CHANGELOG_VERSION = 5
 -- Exposed so Core.lua's GabbaRP_EnsureDefaults can stamp brand-new characters as
 -- already-current (a fresh install has nothing to "catch up" on, so it shouldn't see a
 -- changelog immediately) without this file needing to load before that logic runs.
@@ -1310,6 +1380,12 @@ local CHANGELOG = {
         "|cffffd200Changed:|r the editor popups (Skills, Food/Drink, Death Reactions, Greetings) are now a consistent size, with no more overlapping buttons or wasted empty space.",
     [4] = "|cffffd200GabbaRP v1.0.3|r\n\n" ..
         "|cffffd200Fixed:|r forming a group by inviting someone yourself no longer says both the generic \"Join\" greeting AND the personal welcome for that first invitee -- if you're the group leader, only the personal welcome fires.",
+    [5] = "|cffffd200GabbaRP v1.0.4|r\n\n" ..
+        "|cffffd200New:|r flavor lines for four more Warlock skills -- Banish, Demon Armor (also covers Demon Skin), Unending Breath, and Detect Invisibility (also covers Detect Greater Invisibility).\n\n" ..
+        "|cffffd200Fixed:|r Create Soulstone (and other rank-named skills) sometimes went completely silent, especially solo -- the reaction now always fires, falling back to an emote when there's no group to announce to.\n\n" ..
+        "|cffffd200Fixed:|r Shadow Trance no longer gets randomly swallowed by the spam gate -- it's a rare proc already, so it now always reacts.\n\n" ..
+        "|cffffd200New:|r a \"Reaction frequency\" section in each skill's editor -- \"Always react\" (skip the cooldown/spam-gate) and \"React every N casts\", overriding the built-in defaults per character.\n\n" ..
+        "|cffffd200Changed:|r the static Party/Raid chat-type buttons are gone, replaced by two dynamic types that auto-pick whichever you're in: \"Group Start\" (on cast start, always sent) and \"Group Success\" (on cast success, normal cooldown rules). Individual lines can still force a fixed Party/Raid channel with [PARTY]/[RAID].",
 }
 
 local changelogFrame

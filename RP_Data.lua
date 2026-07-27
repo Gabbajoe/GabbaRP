@@ -638,6 +638,38 @@ ns.GRP_Spells = {
         "witness true horror!",
         "scream all you like.",
     },
+    ["Banish"] = {
+        "begone, this world isn't yours right now.",
+        "enjoy the void, it's temporary. probably.",
+        "out of sight, out of reach.",
+        "you're not real for a little while.",
+    },
+    -- Demon Skin and Demon Armor are the same spell, just the low- and high-rank
+    -- names -- shares one line pool/config under the higher-rank name (see
+    -- RP_Core.lua's combat-log dispatch, which normalizes "Demon Skin" to this key)
+    -- instead of splitting reactions across two effectively-identical entries.
+    ["Demon Armor"] = {
+        "the demon's hide is mine to wear now.",
+        "a little extra protection, courtesy of the abyss.",
+        "wrapped in something that isn't quite skin.",
+        "armored in fel, comfortable as ever.",
+    },
+    ["Unending Breath"] = {
+        "who needs air anyway.",
+        "drowning is someone else's problem today.",
+        "the void doesn't breathe, and neither do I for now.",
+    },
+    -- Detect Invisibility and Detect Greater Invisibility are the same spell, just the
+    -- low- and high-rank names -- shares one line pool/config under the base name (see
+    -- RP_Core.lua's combat-log dispatch, which normalizes "Detect Greater Invisibility"
+    -- to this key) instead of splitting reactions across two effectively-identical
+    -- entries, same as Demon Armor/Demon Skin above.
+    ["Detect Invisibility"] = {
+        "nothing stays hidden from me.",
+        "i see what you don't want me to.",
+        "invisible? cute. still see you.",
+        "even your best hiding spell doesn't work on me.",
+    },
     ["Rain of Fire"] = {
         "let the sky burn.",
         "hellfire rains upon you all.",
@@ -1180,6 +1212,10 @@ ns.GRP_SpellClass = {
     ["Death Coil"] = "WARLOCK",
     ["Life Tap"] = "WARLOCK",
     ["Howl of Terror"] = "WARLOCK",
+    ["Banish"] = "WARLOCK",
+    ["Demon Armor"] = "WARLOCK",
+    ["Unending Breath"] = "WARLOCK",
+    ["Detect Invisibility"] = "WARLOCK",
     ["Rain of Fire"] = "WARLOCK",
     ["Hellfire"] = "WARLOCK",
     ["Searing Pain"] = "WARLOCK",
@@ -1275,6 +1311,33 @@ ns.GRP_SpellClass = {
 -- cooldown isn't enough. Here you can instead set "only every Nth cast triggers".
 ns.GRP_SpellInterval = {
     ["Life Tap"] = 2,
+    -- Rage dumps/combo builders/fillers spammed far more often than the per-skill
+    -- cooldown window -- "every Nth cast" instead of a timer, same reasoning as Life Tap.
+    ["Heroic Strike"] = 3,
+    ["Cleave"] = 3,
+    ["Sunder Armor"] = 2,
+    ["Sinister Strike"] = 3,
+    ["Backstab"] = 3,
+    ["Scorch"] = 2,
+    ["Fireball"] = 2,
+    ["Frostbolt"] = 2,
+    ["Shadow Bolt"] = 2,
+    ["Flash Heal"] = 3,
+    ["Smite"] = 2,
+    ["Arcane Shot"] = 2,
+    ["Lightning Bolt"] = 2,
+    ["Lesser Healing Wave"] = 3,
+    ["Claw"] = 3,
+    ["Rejuvenation"] = 2,
+}
+
+-- The opposite problem: spells that should always get a reaction, bypassing the
+-- global gate's random triggerChance/cooldown entirely (same reasoning as the
+-- hardcoded Imp:/Death: bypass in RP_Core.lua's PassesGlobalGate check) -- typically
+-- because the spell itself is already a rare RNG proc, so subjecting it to an
+-- additional random chance on top would mean its reaction rarely ever shows at all.
+ns.GRP_SkipGlobalGate = {
+    ["Shadow Trance"] = true,
 }
 
 -- How each skill's line gets sent, when it fires: "EMOTE" (/me, third person, e.g. "casts
@@ -1332,6 +1395,7 @@ ns.GRP_EmoteTokens = {
     ["Hunter's Mark"] = "POINT",
     ["Distracting Shot"] = "POINT",
     ["Faerie Fire"] = "POINT",
+    ["Banish"] = "POINT",
     -- Druid melee (Bear/Cat form) -- a roar fits the ferocity.
     ["Bash"] = "ROAR",
     ["Maul"] = "ROAR",

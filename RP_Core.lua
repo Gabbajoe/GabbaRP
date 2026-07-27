@@ -19,6 +19,16 @@ local castCount = {}
 local lastLineIndex = {}
 local playerGUID
 
+-- Some spells share the exact same effect/line pool across ranks but Blizzard gives
+-- each rank tier a genuinely different name (unlike most spells, where every rank
+-- shares one name) -- normalized here, at the one place spellName comes straight from
+-- the combat log, so the rest of the pipeline (lines, chatType, disabledSpells,
+-- export/import, the line editor) only ever has to know about the canonical name.
+local RANK_ALIASES = {
+    ["Demon Skin"] = "Demon Armor",
+    ["Detect Greater Invisibility"] = "Detect Invisibility",
+}
+
 -- Layered on top of the per-spell cooldown/interval below: a floor on how close
 -- together ANY two lines can land (regardless of which skill triggered them, so a DoT
 -- + Shadow Bolt opener can't fire three lines back to back), plus a random chance to
@@ -77,6 +87,23 @@ local function GetChatType(spellName)
         return "EMOTE"
     end
     return chatType
+end
+
+-- Shared "does this spell skip the cooldown/global gate BY DEFAULT" rule -- single
+-- source of truth used by both the actual dispatch (TriggerLine/AnnounceGroupCast
+-- below) and the line editor UI (RP_Options.lua's "Always react" checkbox), so the
+-- checkbox always accurately reflects what will really happen. db.customSkipGate
+-- always wins over this default once explicitly set either way -- see call sites.
+-- Imp/Death reactions and "Group Start" (cast-start announcements) all skip by
+-- default for the same reason: they're rare/deliberate enough that throttling them
+-- just means rarely ever seeing them at all. ns.GRP_SkipGlobalGate (RP_Data.lua)
+-- covers additional individual spells that don't fit either category, e.g. Shadow
+-- Trance.
+function ns.GabbaRP_DefaultSkipGate(spellName, chatType)
+    return spellName:match("^Imp: ") ~= nil
+        or spellName:match("^Death: ") ~= nil
+        or chatType == "GROUP_ANNOUNCE"
+        or (ns.GRP_SkipGlobalGate and ns.GRP_SkipGlobalGate[spellName] and true or false)
 end
 
 -- Checks guild membership against YOUR OWN guild roster (GetGuildRosterInfo) instead of
@@ -189,13 +216,15 @@ end
 
 -- %t/%p/%w are plain gsub substitutions, not string.format -- a user typing a stray "%" in
 -- their own custom line would otherwise error out of string.format entirely.
--- Optional per-line chat-type override: a line can start with "[SAY]", "[YELL]", or
--- "[EMOTE]" (whitespace after the tag is optional -- "[SAY] text" and "[SAY]text" both
--- work) to say THIS line differently than the skill's normal chat type, e.g. one line
--- that reads better shouted than emoted. GROUP_ANNOUNCE is deliberately not a valid tag
--- here -- that chat type is driven entirely by AnnounceGroupCast on cast start, never by
--- an individual line.
-local VALID_LINE_CHATTYPE_OVERRIDES = { SAY = true, YELL = true, EMOTE = true }
+-- Optional per-line chat-type override: a line can start with "[SAY]", "[YELL]",
+-- "[EMOTE]", "[PARTY]", or "[RAID]" (whitespace after the tag is optional -- "[SAY]
+-- text" and "[SAY]text" both work) to say THIS line differently than the skill's
+-- normal chat type, e.g. one line that reads better shouted than emoted, or a specific
+-- line that should always go to a fixed channel even though the skill itself uses the
+-- dynamic "Group Start"/"Group Success" auto-channel types. GROUP_ANNOUNCE/GROUP_SUCCESS
+-- are deliberately not valid tags here -- those are skill-level, dynamic-channel
+-- concepts, not something a single static line tag can express.
+local VALID_LINE_CHATTYPE_OVERRIDES = { SAY = true, YELL = true, EMOTE = true, PARTY = true, RAID = true }
 local function ExtractLineChatTypeOverride(line)
     local tag, rest = line:match("^%[(%a+)%]%s*(.*)$")
     if tag and VALID_LINE_CHATTYPE_OVERRIDES[tag:upper()] then
@@ -233,7 +262,7 @@ local function TDebug(spellName, msg)
     end
 end
 
-local function TriggerLine(spellName, targetName, publicChatType, lastWords)
+local function TriggerLine(spellName, targetName, lastWords)
     local db = GabbaRPCharDB.rp
     if not db.enabled then return end
 
@@ -277,23 +306,32 @@ local function TriggerLine(spellName, targetName, publicChatType, lastWords)
 
     -- GROUP_ANNOUNCE spells are handled entirely by AnnounceGroupCast on cast start
     -- instead (see below) -- they never produce a normal emote/self/public line here.
-    local chatType = publicChatType or GetChatType(spellName)
-    if chatType == "GROUP_ANNOUNCE" then return end
+    local chatType = GetChatType(spellName)
+    if chatType == "GROUP_ANNOUNCE" then
+        TDebug(spellName, "chatType is GROUP_ANNOUNCE, handled by AnnounceGroupCast instead")
+        return
+    end
 
-    -- Imp reactions, Death reactions, and Create Soulstone all bypass the per-spell
-    -- cooldown AND the shared global gate below. The Imp only talks back when it actually
-    -- says something (a handful of times per fight at most), so there's no realistic spam
-    -- risk, and throttling it just made it feel unresponsive. A death is rarer still and
-    -- far more important to actually see -- the global gate's random triggerChance (35% by
-    -- default) was silently swallowing real guild/group/raid death announcements most of
-    -- the time, which defeats the entire point of the feature. Handing someone a
-    -- soulstone is just as rare/deliberate as either -- it should never get randomly
-    -- swallowed.
-    local bypassesGlobalGate = spellName:match("^Imp: ") ~= nil or spellName:match("^Death: ") ~= nil
-        or spellName == "Create Soulstone" or spellName == "Create Soulstone (LOCAL)"
+    -- See ns.GabbaRP_DefaultSkipGate above for the default rule (Imp/Death/rare procs);
+    -- db.customSkipGate (line editor's "Always react" checkbox) always wins over it
+    -- once explicitly set either way.
+    local skipGate = ns.GabbaRP_DefaultSkipGate(spellName, chatType)
+    if db.customSkipGate[spellName] ~= nil then
+        skipGate = db.customSkipGate[spellName]
+    end
+    local bypassesGlobalGate = skipGate
 
     if not bypassesGlobalGate then
-        local interval = ns.GRP_SpellInterval and ns.GRP_SpellInterval[spellName]
+        -- db.customInterval (line editor's "React every N casts" field) overrides the
+        -- code default when set; there's no override for "explicitly disable a
+        -- code-default interval" -- customSkipGate above already covers "never
+        -- throttle this spell at all", which is the only override direction requested.
+        local interval = db.customInterval[spellName] or (ns.GRP_SpellInterval and ns.GRP_SpellInterval[spellName])
+        -- x % 1 is always 0, never 1 -- an interval of 1 (or 0) would never pass the
+        -- check below at all, silently going permanently silent instead of "every
+        -- cast". User-entered values can be 0/1 (the code defaults above never are),
+        -- so clamp here rather than trust the input.
+        if interval and interval < 2 then interval = nil end
         if interval then
             castCount[spellName] = (castCount[spellName] or 0) + 1
             if castCount[spellName] % interval ~= 1 then
@@ -321,17 +359,29 @@ local function TriggerLine(spellName, targetName, publicChatType, lastWords)
     local lineChatType, strippedLine = ExtractLineChatTypeOverride(PickLine(spellName, lines))
     local line = ApplyPlaceholders(strippedLine, targetName, lastWords)
 
-    -- A line's own [SAY]/[YELL]/[EMOTE] tag wins over the skill's normal chat type, with
-    -- the same MessageQueue-availability downgrade GetChatType applies above (Say/Yell
-    -- need a real hardware event to send at all -- see the C_Timer.After comment below --
-    -- so without MessageQueue loaded, an override to either just falls back to Emote
-    -- instead of silently never sending). Not honored when the CALLER forced a specific
-    -- channel (publicChatType, e.g. Create Soulstone's dynamic RAID/PARTY targeting) --
-    -- that's a delivery guarantee the line-level tag must not be able to break.
+    -- A line's own [SAY]/[YELL]/[EMOTE]/[PARTY]/[RAID] tag wins over the skill's normal
+    -- chat type, with the same MessageQueue-availability downgrade GetChatType applies
+    -- above (Say/Yell need a real hardware event to send at all -- see the
+    -- C_Timer.After comment below -- so without MessageQueue loaded, an override to
+    -- either just falls back to Emote instead of silently never sending).
     local effectiveChatType = chatType
-    if lineChatType and not publicChatType then
+    if lineChatType then
         effectiveChatType = lineChatType
         if (effectiveChatType == "SAY" or effectiveChatType == "YELL") and not (MessageQueue and MessageQueue.SendChatMessage) then
+            effectiveChatType = "EMOTE"
+        end
+    end
+
+    -- "Group Success": same dynamic party-or-raid auto-channel as "Group Start"
+    -- (GROUP_ANNOUNCE/AnnounceGroupCast), but resolved here at send time since this
+    -- type fires on cast success through the normal cooldown/gate rules above instead
+    -- of bypassing them. Falls back to Emote when there's no group to send to at all.
+    if effectiveChatType == "GROUP_SUCCESS" then
+        if IsInRaid() then
+            effectiveChatType = "RAID"
+        elseif IsInGroup() then
+            effectiveChatType = "PARTY"
+        else
             effectiveChatType = "EMOTE"
         end
     end
@@ -417,28 +467,69 @@ end
 -- Announces GROUP_ANNOUNCE spells (e.g. Ritual of Summoning) to party/raid chat the
 -- moment you START casting, not when the (long) cast finishes -- and always, regardless
 -- of /gabba rp mode, since the point is warning the group before the cast completes.
-local lastAnnounce = {}
 local function AnnounceGroupCast(spellName, targetName)
     local db = GabbaRPCharDB.rp
     if not db.enabled then return end
     if GetChatType(spellName) ~= "GROUP_ANNOUNCE" then return end
 
     local lines = GetLines(spellName)
-    if not lines or #lines == 0 then return end
-    if db.disabledSpells[spellName] then return end
+    if not lines or #lines == 0 then
+        TDebug(spellName, "AnnounceGroupCast: no lines configured")
+        return
+    end
+    if db.disabledSpells[spellName] then
+        TDebug(spellName, "AnnounceGroupCast: skill disabled")
+        return
+    end
 
-    local now = GetTime()
-    if lastAnnounce[spellName] and (now - lastAnnounce[spellName]) < (db.perSkillCooldown or ns.GRP_DEFAULT_PER_SKILL_COOLDOWN) then return end
-    lastAnnounce[spellName] = now
+    -- Shares customSkipGate/customInterval/castCount/lastTrigger with TriggerLine's own
+    -- gate below instead of keeping a separate dedicated cooldown table -- GROUP_ANNOUNCE
+    -- skips by default (ns.GabbaRP_DefaultSkipGate), same "always sent" behavior as
+    -- before, but now a user CAN throttle a specific Announce-type spell via the line
+    -- editor if they want to (e.g. Ritual of Summoning feeling too chatty), which was
+    -- never possible while this was a hardcoded, non-overridable bypass.
+    local skipGate = ns.GabbaRP_DefaultSkipGate(spellName, "GROUP_ANNOUNCE")
+    if db.customSkipGate[spellName] ~= nil then
+        skipGate = db.customSkipGate[spellName]
+    end
+    if not skipGate then
+        local interval = db.customInterval[spellName]
+        if interval and interval < 2 then interval = nil end
+        if interval then
+            castCount[spellName] = (castCount[spellName] or 0) + 1
+            if castCount[spellName] % interval ~= 1 then
+                TDebug(spellName, string.format("AnnounceGroupCast: waiting for interval (cast %d, every %dth)", castCount[spellName], interval))
+                return
+            end
+        else
+            local now = GetTime()
+            local perSkillCooldown = db.perSkillCooldown or ns.GRP_DEFAULT_PER_SKILL_COOLDOWN
+            if lastTrigger[spellName] and (now - lastTrigger[spellName]) < perSkillCooldown then
+                TDebug(spellName, "AnnounceGroupCast: per-skill cooldown active")
+                return
+            end
+            lastTrigger[spellName] = now
+        end
+    end
 
     local chatType
     if IsInRaid() then
         chatType = "RAID"
     elseif IsInGroup() then
         chatType = "PARTY"
+    elseif spellName == "Create Soulstone" or spellName == "Create Soulstone (LOCAL)" then
+        -- Soulstones are routinely made solo (unlike Ritual of Summoning or a Portal,
+        -- which only make sense with a group to summon/port into) -- narrate it
+        -- locally via emote instead of just going silent like other GROUP_ANNOUNCE
+        -- spells do when there's no group to announce to.
+        chatType = "EMOTE"
     end
-    if not chatType then return end
+    if not chatType then
+        TDebug(spellName, "AnnounceGroupCast: not in a group, nothing to announce to")
+        return
+    end
 
+    TDebug(spellName, "AnnounceGroupCast: fired (" .. chatType .. ")")
     local line = ApplyPlaceholders(PickLine(spellName, lines), targetName)
     -- Same taint-avoidance reasoning as TriggerLine's SendChatMessage call above.
     C_Timer.After(0, function() SendChatMessage(line, chatType) end)
@@ -495,7 +586,7 @@ function ns.GabbaRP_HandleCommand(msg)
         else
             lastWords = lastWords ~= "" and lastWords or nil
             local lang = GabbaRPCharDB.rp.localLanguageEnabled and "local" or "en"
-            TriggerLine(ResolveSpellKey("Death: Guild", lang), name, nil, lastWords)
+            TriggerLine(ResolveSpellKey("Death: Guild", lang), name, lastWords)
             ns.GabbaRP_Print(string.format("Simulated Death: Guild for %s (last words: %s)", name, lastWords or "none"))
         end
     else
@@ -592,7 +683,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
                         -- definition, so there's no group composition to measure (the person who
                         -- died may not even be in your party/raid).
                         local lang = GabbaRPCharDB.rp.localLanguageEnabled and "local" or "en"
-                        TriggerLine(ResolveSpellKey("Death: Guild", lang), playerData.name, nil, playerData.last_words)
+                        TriggerLine(ResolveSpellKey("Death: Guild", lang), playerData.name, playerData.last_words)
                     end
                 end)
                 if not ok then
@@ -603,26 +694,14 @@ frame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
         local _, subevent, _, sourceGUID, _, _, _, destGUID, destName, _, _, _, spellName = CombatLogGetCurrentEventInfo()
         if subevent == "SPELL_CAST_SUCCESS" and sourceGUID == playerGUID then
-            -- GROUP_ANNOUNCE spells are already announced on cast start (see
-            -- AnnounceGroupCast below) -- TriggerLine self-guards against those too, but
-            -- no need to even attempt it here.
-            if spellName == "Create Soulstone" or spellName == "Create Soulstone (Lesser)"
-                or spellName == "Create Soulstone (Minor)" then
-                -- All three ranks share one reaction/line pool under the max-rank name --
-                -- targets party/raid chat dynamically (so it always resolves to a channel
-                -- you're actually in) instead of a fixed chatType like most other spells.
-                -- Falls back to the default (EMOTE) when not grouped at all.
-                local key = ResolveSpellKey("Create Soulstone", ns.GabbaRP_GetGroupLanguage())
-                if IsInRaid() then
-                    TriggerLine(key, destName, "RAID")
-                elseif IsInGroup() then
-                    TriggerLine(key, destName, "PARTY")
-                else
-                    TriggerLine(key, destName)
-                end
-            else
-                TriggerLine(ResolveSpellKey(spellName, ns.GabbaRP_GetGroupLanguage()), destName)
-            end
+            -- GROUP_ANNOUNCE spells (including all Create Soulstone ranks, normalized to
+            -- the base name at the UNIT_SPELLCAST_START dispatch site below) are handled
+            -- entirely by AnnounceGroupCast on cast start -- including the solo case now,
+            -- see its own EMOTE fallback. TriggerLine self-guards against calling it again
+            -- here (GetChatType(spellName) == "GROUP_ANNOUNCE"), so this is a plain,
+            -- unconditional dispatch for every other spell.
+            spellName = RANK_ALIASES[spellName] or spellName
+            TriggerLine(ResolveSpellKey(spellName, ns.GabbaRP_GetGroupLanguage()), destName)
         elseif subevent == "SPELL_AURA_APPLIED" and destGUID == playerGUID and sourceGUID == playerGUID then
             -- for buff procs like Nightfall/"Shadow Trance" that aren't a cast of your own --
             -- sourceGUID must ALSO be the player, not just destGUID, otherwise this fires
@@ -683,6 +762,14 @@ frame:SetScript("OnEvent", function(self, event, ...)
         if unit == "player" then
             local spellName = GetSpellInfo(spellID)
             if spellName then
+                -- Same rank-name normalization as the combat-log Soulstone handling
+                -- below -- without it, AnnounceGroupCast (and the "warn the group
+                -- before a long cast finishes" pre-cast announcement it's for) never
+                -- fires for any rank except the one exact rank named bare "Create
+                -- Soulstone", since chatType is only configured under that base key.
+                if spellName:find("^Create Soulstone%f[%A]") then
+                    spellName = "Create Soulstone"
+                end
                 AnnounceGroupCast(ResolveSpellKey(spellName, ns.GabbaRP_GetGroupLanguage()), UnitName("target"))
             end
         end

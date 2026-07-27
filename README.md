@@ -1,6 +1,6 @@
-# GabbaRP — v1.0.3
+# GabbaRP — v1.0.4
 
-GabbaRP gives your character a voice. It listens for the spells you cast and, every so often, has your character say or emote something fitting in Say, Emote, Guild, Party or Raid chat — a Warrior taunting before a Charge, a Priest murmuring a prayer before Power Word: Shield, a Warlock's Imp mouthing off in Say chat. Every class is covered, every line is editable in-game, and nothing is sent to chat unless you're actually eligible to see it (no spamming a raid with your Rogue's inner monologue).
+GabbaRP gives your character a voice. It listens for the spells you cast and, every so often, has your character say or emote something fitting in Say, Emote, Guild chat, or automatically to whichever of Party/Raid you're actually in — a Warrior taunting before a Charge, a Priest murmuring a prayer before Power Word: Shield, a Warlock's Imp mouthing off in Say chat. Every class is covered, every line is editable in-game, and nothing is sent to chat unless you're actually eligible to see it (no spamming a raid with your Rogue's inner monologue).
 
 It's fully self-contained — no dependencies, no custom window to learn. Configuration lives directly in Blizzard's own **Options > AddOns > GabbaRP** panel, so it looks and feels like part of the game.
 
@@ -15,7 +15,7 @@ Copy this folder to `World of Warcraft/_classic_era_/Interface/AddOns/GabbaRP` a
 - Death reactions: your character reacts differently depending on whether a guildmate, party/raid member, or someone else died nearby.
 - Warlock Imp Backtalk: your Voidwalker/Imp/etc. occasionally talks back when nearby monsters say or yell something.
 - Group greetings: a line when you join a group, and a personal welcome line for whoever joins after you.
-- Spam protection you control: a per-skill cooldown, a global "minimum gap between any two lines" cooldown, and a percent chance a line actually fires once eligible — each with its own slider. Fast-recast skills (like Life Tap) automatically fall back to an "only every Nth cast" rule instead of a cooldown, so they don't go silent forever on a short timer.
+- Spam protection you control: a per-skill cooldown, a global "minimum gap between any two lines" cooldown, and a percent chance a line actually fires once eligible — each with its own slider. Fast-recast skills (like Life Tap) automatically fall back to an "only every Nth cast" rule instead of a cooldown, so they don't go silent forever on a short timer. Every skill's editor also has its own "Reaction frequency" override — force a skill to always react (skip the cooldown/gate entirely) or to react only every Nth cast, regardless of the built-in default.
 - **Optional local-language support**: off by default. Turn on "Use local language" and fill in your own translated lines (via each Edit button's Language tab) to have your character speak your guild's language instead of English when the group is mostly guildmates — falls back to English for anything you haven't translated yet.
 - Every line list is fully editable in-game: add, remove, or reset any skill's lines to default, per language.
 - Export/import your entire configuration as plain text, to back it up or share it with guildmates.
@@ -45,6 +45,14 @@ Blizzard requires a real click or keypress before an addon is allowed to send a 
 This only matters if you have a skill configured to send **Say** or **Yell** specifically (Emote, the default for most skills, isn't affected). GabbaRP shows a one-time popup at login if any of your currently enabled skills are set that way, as a reminder. Switch the skill back to Emote in the line editor if this bothers you.
 
 ## Changelog
+
+### V1.0.4
+
+- New: flavor lines for four more Warlock skills — Banish, Demon Armor (also covers Demon Skin), Unending Breath, and Detect Invisibility (also covers Detect Greater Invisibility).
+- Fixed: Create Soulstone (and other rank-named skills) sometimes went completely silent, especially solo — the reaction now always fires, falling back to an emote when there's no group to announce to.
+- Fixed: Shadow Trance no longer gets randomly swallowed by the spam gate — it's a rare proc already, so it now always reacts.
+- New: a "Reaction frequency" section in each skill's editor — "Always react" (skip the cooldown/spam-gate) and "React every N casts", overriding the built-in defaults per character.
+- Changed: the static Party/Raid chat-type buttons are gone, replaced by two dynamic types that auto-pick whichever you're in: "Group Start" (on cast start, always sent) and "Group Success" (on cast success, normal cooldown rules). Individual lines can still force a fixed Party/Raid channel with `[PARTY]`/`[RAID]`.
 
 ### V1.0.3
 
