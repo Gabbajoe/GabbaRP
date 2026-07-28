@@ -1,4 +1,4 @@
-# GabbaRP — v1.0.4
+# GabbaRP — v1.0.6
 
 GabbaRP gives your character a voice. It listens for the spells you cast and, every so often, has your character say or emote something fitting in Say, Emote, Guild chat, or automatically to whichever of Party/Raid you're actually in — a Warrior taunting before a Charge, a Priest murmuring a prayer before Power Word: Shield, a Warlock's Imp mouthing off in Say chat. Every class is covered, every line is editable in-game, and nothing is sent to chat unless you're actually eligible to see it (no spamming a raid with your Rogue's inner monologue).
 
@@ -45,6 +45,18 @@ Blizzard requires a real click or keypress before an addon is allowed to send a 
 This only matters if you have a skill configured to send **Say** or **Yell** specifically (Emote, the default for most skills, isn't affected). GabbaRP shows a one-time popup at login if any of your currently enabled skills are set that way, as a reminder. Switch the skill back to Emote in the line editor if this bothers you.
 
 ## Changelog
+
+### V1.0.6
+
+- New: Say/Yell reactions now have a delivery option in Settings. "Safe" (new default) waits for your next real action (a skill or item use) to send, so it never eats a click, just possibly a beat slower. "Instant" keeps the old behavior: near-zero delay, but your very next click or keypress gets swallowed.
+- New: Mind Control and Mind Vision now also whisper the target directly when successfully cast on a player, on top of their normal group-facing line. Mind Control against the opposing faction falls back to a Say translated through the Hermes addon if it's installed. Mind Vision against the opposing faction is always skipped. Both are skipped entirely against non-player targets.
+
+### V1.0.5
+
+- Fixed: Create Soulstone reacted at the wrong moment — when you conjure the item, before you've even picked a target. It now waits for the item to actually be used on someone, which is also when the `%t` placeholder finally means something.
+- Fixed: a "Group Start"/"Group Success" override on Create Soulstone (English or the local-language mirror) could go completely silent after the change above — both are now correctly reconnected.
+- New: a one-line heads-up on login if any settings were automatically adjusted for this version, instead of that happening completely invisibly.
+- New: `/gabbarp triggerdebug` now also logs every combat-log event you personally trigger, not just ones the addon already recognizes — helpful for figuring out exactly what an item or spell fires as.
 
 ### V1.0.4
 

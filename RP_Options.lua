@@ -91,8 +91,8 @@ local CHAT_TYPES = {
     { key = "SAY", short = "Say", width = 44, label = "Say" },
     { key = "YELL", short = "Yell", width = 44, label = "Yell" },
     { key = "GUILD", short = "Guild", width = 50, label = "Guild" },
-    { key = "GROUP_ANNOUNCE", short = "Group Start", width = 90, label = "Party or Raid chat (whichever you're in), right when the cast starts -- always sent, ignores cooldown/gate" },
-    { key = "GROUP_SUCCESS", short = "Group Success", width = 100, label = "Party or Raid chat (whichever you're in), once the cast succeeds -- normal cooldown/gate rules apply" },
+    { key = "GROUP_ANNOUNCE", short = "Group Start", width = 90, label = "Party or Raid chat (whichever you're in), right when the cast starts. Always sent, ignores cooldown/gate." },
+    { key = "GROUP_SUCCESS", short = "Group Success", width = 100, label = "Party or Raid chat (whichever you're in), once the cast succeeds. Normal cooldown/gate rules apply." },
 }
 
 local GREETING_TIME_SLOTS = {
@@ -395,6 +395,19 @@ local function CreateEditorFrame()
         end
     end
 
+    -- The "Mind Control Whisper"/"Mind Vision Whisper" dummy entries (RP_Data.lua,
+    -- fired from RP_Core.lua's TryTargetWhisperReaction) are never sent via a chat
+    -- type the user picks -- always a whisper to the actual target, or a Hermes-Say
+    -- fallback for Mind Control specifically -- and don't go through the normal
+    -- cooldown/gate at all, so neither the "Send as" nor "Reaction frequency"
+    -- sections apply. Replaced with a single fixed explanation instead for these two.
+    local whisperInfoText = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    whisperInfoText:SetWidth(390)
+    whisperInfoText:SetJustifyH("LEFT")
+    whisperInfoText:SetText("Always sent as a whisper to whoever you actually targeted, not a chat type you pick. Skipped entirely if the target isn't an actual player.\n\nMind Control against the opposing faction: sent as a Say translated through the Hermes addon if it's installed, otherwise skipped.\n\nMind Vision against the opposing faction: always skipped.")
+    whisperInfoText:Hide()
+    f.whisperInfoText = whisperInfoText
+
     -- Anchored to chatLabel's own TOP (not a fixed offset off hint) so it tracks
     -- chatLabel's row exactly regardless of how tall the frequency section above ends
     -- up being, and RIGHT off hint for the same horizontal position as before -- a
@@ -430,6 +443,30 @@ local function CreateEditorFrame()
     local linesLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     linesLabel:SetPoint("TOPLEFT", chatDesc, "BOTTOMLEFT", 0, -14)
     linesLabel:SetText("Lines: |cff888888(click a line to edit it)|r")
+
+    function f.LayoutForWhisperDummy(isWhisperDummy)
+        freqLabel:SetShown(not isWhisperDummy)
+        freqAlwaysCB:SetShown(not isWhisperDummy)
+        freqIntervalLabel:SetShown(not isWhisperDummy)
+        freqIntervalBox:SetShown(not isWhisperDummy)
+        freqIntervalHint:SetShown(not isWhisperDummy)
+        chatLabel:SetShown(not isWhisperDummy)
+        for _, e in ipairs(editorChatTabs) do e.btn:SetShown(not isWhisperDummy) end
+        chatDesc:SetShown(not isWhisperDummy)
+        whisperInfoText:SetShown(isWhisperDummy)
+
+        linesLabel:ClearAllPoints()
+        if isWhisperDummy then
+            -- freqLabel is only hidden, not un-anchored -- its position (already
+            -- correctly toggled by LayoutForLanguage above) is still valid to anchor
+            -- off of.
+            whisperInfoText:ClearAllPoints()
+            whisperInfoText:SetPoint("TOPLEFT", freqLabel, "TOPLEFT", 0, 0)
+            linesLabel:SetPoint("TOPLEFT", whisperInfoText, "BOTTOMLEFT", 0, -14)
+        else
+            linesLabel:SetPoint("TOPLEFT", chatDesc, "BOTTOMLEFT", 0, -14)
+        end
+    end
 
     local savedText = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     savedText:SetPoint("LEFT", linesLabel, "RIGHT", 10, 0)
@@ -503,6 +540,12 @@ local function ShowLineEditor(spellName, allowLanguage)
     end
     SyncEditorChatType(GetEffectiveChatType(editorSpellName))
     SyncEditorFrequency(editorSpellName)
+    -- "Mind Control Whisper"/"Mind Vision Whisper" (+ (LOCAL) mirrors) are always sent
+    -- as a whisper to the actual target (or a Hermes fallback), never a chat type the
+    -- user picks -- see RP_Core.lua's TryTargetWhisperReaction.
+    local baseSpellName = editorSpellName:gsub(" %(LOCAL%)$", "")
+    local isWhisperDummy = baseSpellName == "Mind Control Whisper" or baseSpellName == "Mind Vision Whisper"
+    editorFrame.LayoutForWhisperDummy(isWhisperDummy)
     RefreshEditorRows()
     editorFrame:Show()
 end
@@ -775,7 +818,7 @@ function ns.GabbaRP_BuildGeneralPanel(parent)
     scrollFrame:SetPoint("TOPLEFT", 0, 0)
     scrollFrame:SetPoint("BOTTOMRIGHT", -18, 0)
     local f = CreateFrame("Frame", nil, scrollFrame)
-    f:SetSize(380, 900)
+    f:SetSize(380, 1050)
     scrollFrame:SetScrollChild(f)
 
     local modeCheckboxes = {}
@@ -840,7 +883,7 @@ function ns.GabbaRP_BuildGeneralPanel(parent)
     useLocalDesc:SetPoint("TOPLEFT", useLocalCB, "BOTTOMLEFT", 0, -2)
     useLocalDesc:SetWidth(260)
     useLocalDesc:SetJustifyH("LEFT")
-    useLocalDesc:SetText("Off by default -- this addon ships English-only. Turn on and fill in your own lines (via each Edit button's Language tab) to use a local language instead of/alongside English.")
+    useLocalDesc:SetText("Off by default. This addon ships English-only. Turn on and fill in your own lines (via each Edit button's Language tab) to use a local language instead of/alongside English.")
 
     prevAnchor = useLocalDesc
 
@@ -872,6 +915,41 @@ function ns.GabbaRP_BuildGeneralPanel(parent)
         table.insert(languageCheckboxes, { key = lang.key, cb = cb })
         prevAnchor = cb
     end
+
+    -- === Say/Yell Delivery ===
+    local sayYellDesc = AddSection(f, prevAnchor, "Say/Yell Delivery",
+        "Blizzard requires a real click/keypress to send Say/Yell -- this picks how that requirement gets satisfied.")
+
+    local SAY_YELL_MODES = {
+        { key = "safe", label = "Safe (default)" },
+        { key = "instant", label = "Instant" },
+    }
+    local sayYellCheckboxes = {}
+    local function SetSayYellDelivery(mode)
+        GabbaRPCharDB.rp.sayYellDelivery = mode
+        for _, entry in ipairs(sayYellCheckboxes) do
+            entry.cb:SetChecked(entry.key == mode)
+        end
+    end
+
+    prevAnchor = sayYellDesc
+    local firstSayYell = true
+    for _, mode in ipairs(SAY_YELL_MODES) do
+        local cb = GabbaRP_NewCheckbox(f, mode.label)
+        cb:SetPoint("TOPLEFT", prevAnchor, "BOTTOMLEFT", 0, firstSayYell and -6 or -2)
+        firstSayYell = false
+        cb:SetScript("OnClick", function() SetSayYellDelivery(mode.key) end)
+        table.insert(sayYellCheckboxes, { key = mode.key, cb = cb })
+        prevAnchor = cb
+    end
+
+    local sayYellExplain = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    sayYellExplain:SetPoint("TOPLEFT", prevAnchor, "BOTTOMLEFT", 0, -6)
+    sayYellExplain:SetWidth(260)
+    sayYellExplain:SetJustifyH("LEFT")
+    sayYellExplain:SetText("Safe: waits for your next real action (a skill or item use) to send. Never eats a click, but can lag a beat behind if you're not pressing anything.\n\nInstant: sends on your very next click or keypress anywhere, near-zero delay, but that click's own action doesn't happen.")
+
+    prevAnchor = sayYellExplain
 
     -- === Group Greetings ===
     local greetingsDesc = AddSection(f, prevAnchor, "Group Greetings",
@@ -996,7 +1074,7 @@ function ns.GabbaRP_BuildGeneralPanel(parent)
     suppressGroupRaidDesc:SetPoint("TOPLEFT", suppressGroupRaidCB, "BOTTOMLEFT", 0, -2)
     suppressGroupRaidDesc:SetWidth(260)
     suppressGroupRaidDesc:SetJustifyH("LEFT")
-    suppressGroupRaidDesc:SetText("Avoids a duplicate message when a guildmate who dies was also in your party/raid -- guild chat already covers it a few seconds later.")
+    suppressGroupRaidDesc:SetText("Avoids a duplicate message when a guildmate who dies was also in your party/raid. Guild chat already covers it a few seconds later.")
 
     -- === Spam Protection ===
     local spamDesc = AddSection(f, suppressGroupRaidDesc, "Spam Protection",
@@ -1102,6 +1180,9 @@ function ns.GabbaRP_BuildGeneralPanel(parent)
         end
         for _, entry in ipairs(languageCheckboxes) do
             entry.cb:SetChecked(entry.key == (db.soloLanguage or "en"))
+        end
+        for _, entry in ipairs(sayYellCheckboxes) do
+            entry.cb:SetChecked(entry.key == (db.sayYellDelivery or "safe"))
         end
     end
 
@@ -1312,7 +1393,7 @@ local function CreateExportImportFrame()
     applyBtn:SetScript("OnClick", function()
         local blocks = ParseExportText(editBox:GetText())
         if #blocks == 0 then
-            statusText:SetText("No [Section] headers found -- nothing changed.")
+            statusText:SetText("No [Section] headers found, nothing changed.")
             return
         end
         StaticPopupDialogs["GABBARP_CONFIRM_IMPORT"] = {
@@ -1356,7 +1437,7 @@ end
 -- anyone behind sees every entry they missed concatenated, not just the latest.
 ----------------------------------------------------------------------
 
-local CHANGELOG_VERSION = 5
+local CHANGELOG_VERSION = 7
 -- Exposed so Core.lua's GabbaRP_EnsureDefaults can stamp brand-new characters as
 -- already-current (a fresh install has nothing to "catch up" on, so it shouldn't see a
 -- changelog immediately) without this file needing to load before that logic runs.
@@ -1368,24 +1449,32 @@ local CHANGELOG = {
         "|cffffd200For bug reports:|r /gabbarp report prints a copy-pasteable summary, and /gabbarp triggerdebug, greetdebug, and debuglog help track down anything that isn't working as expected.",
     [2] = "|cffffd200GabbaRP v1.0.1|r\n\n" ..
         "|cffffd200Fixed:|r a buff landing on you from someone else (another priest's Power Word: Shield, a druid's Mark of the Wild, etc.) no longer makes your character react as if you had cast it yourself.\n\n" ..
-        "|cffffd200New:|r use %w in a Death: Guild line to include the deceased's last words. A %w line is only ever picked when there actually are last words to show -- otherwise your normal lines are used instead.\n\n" ..
+        "|cffffd200New:|r use %w in a Death: Guild line to include the deceased's last words. A %w line is only ever picked when there actually are last words to show; otherwise your normal lines are used instead.\n\n" ..
         "|cffffd200New:|r any line can start with [SAY], [YELL], or [EMOTE] to say just that one line differently than the skill's usual chat type. Falls back to the skill's normal chat type if the tag is missing or misspelled.",
     [3] = "|cffffd200GabbaRP v1.0.2|r\n\n" ..
-        "|cffffd200New:|r flavor lines for five Priest racials/talent that were missing entirely -- Fear Ward, Desperate Prayer, Starshards, Elune's Grace, and Inner Focus.\n\n" ..
-        "|cffffd200New:|r character animations for more skills -- Warrior war cries and self-buffs, Druid melee, and several CC/utility spells (Shackle Undead, Mind Control, Hunter's Mark, Distracting Shot, Faerie Fire).\n\n" ..
-        "|cffffd200Changed:|r Fear, Psychic Scream, and Howl of Terror now play a menacing gesture instead of a startled one -- you're the one causing the fear, not feeling it.\n\n" ..
-        "|cffffd200Fixed:|r the Local Language skill list was empty for every class -- it now correctly lists every skill, and Export/Import handles local-language lines properly too.\n\n" ..
+        "|cffffd200New:|r flavor lines for five Priest racials/talent that were missing entirely: Fear Ward, Desperate Prayer, Starshards, Elune's Grace, and Inner Focus.\n\n" ..
+        "|cffffd200New:|r character animations for more skills: Warrior war cries and self-buffs, Druid melee, and several CC/utility spells (Shackle Undead, Mind Control, Hunter's Mark, Distracting Shot, Faerie Fire).\n\n" ..
+        "|cffffd200Changed:|r Fear, Psychic Scream, and Howl of Terror now play a menacing gesture instead of a startled one. You're the one causing the fear, not feeling it.\n\n" ..
+        "|cffffd200Fixed:|r the Local Language skill list was empty for every class. It now correctly lists every skill, and Export/Import handles local-language lines properly too.\n\n" ..
         "|cffffd200New:|r a one-time login warning if you have a skill set to Say/Yell chat, explaining why one of your clicks can occasionally get \"eaten\" (an unavoidable side effect of how Say/Yell messages have to be sent).\n\n" ..
         "|cffffd200Fixed:|r removed two Priest entries that don't actually exist on this client (Shadowguard, Shadow Word: Death).\n\n" ..
         "|cffffd200Changed:|r the editor popups (Skills, Food/Drink, Death Reactions, Greetings) are now a consistent size, with no more overlapping buttons or wasted empty space.",
     [4] = "|cffffd200GabbaRP v1.0.3|r\n\n" ..
-        "|cffffd200Fixed:|r forming a group by inviting someone yourself no longer says both the generic \"Join\" greeting AND the personal welcome for that first invitee -- if you're the group leader, only the personal welcome fires.",
+        "|cffffd200Fixed:|r forming a group by inviting someone yourself no longer says both the generic \"Join\" greeting AND the personal welcome for that first invitee. If you're the group leader, only the personal welcome fires.",
     [5] = "|cffffd200GabbaRP v1.0.4|r\n\n" ..
-        "|cffffd200New:|r flavor lines for four more Warlock skills -- Banish, Demon Armor (also covers Demon Skin), Unending Breath, and Detect Invisibility (also covers Detect Greater Invisibility).\n\n" ..
-        "|cffffd200Fixed:|r Create Soulstone (and other rank-named skills) sometimes went completely silent, especially solo -- the reaction now always fires, falling back to an emote when there's no group to announce to.\n\n" ..
-        "|cffffd200Fixed:|r Shadow Trance no longer gets randomly swallowed by the spam gate -- it's a rare proc already, so it now always reacts.\n\n" ..
-        "|cffffd200New:|r a \"Reaction frequency\" section in each skill's editor -- \"Always react\" (skip the cooldown/spam-gate) and \"React every N casts\", overriding the built-in defaults per character.\n\n" ..
+        "|cffffd200New:|r flavor lines for four more Warlock skills: Banish, Demon Armor (also covers Demon Skin), Unending Breath, and Detect Invisibility (also covers Detect Greater Invisibility).\n\n" ..
+        "|cffffd200Fixed:|r Create Soulstone (and other rank-named skills) sometimes went completely silent, especially solo. The reaction now always fires, falling back to an emote when there's no group to announce to.\n\n" ..
+        "|cffffd200Fixed:|r Shadow Trance no longer gets randomly swallowed by the spam gate. It's a rare proc already, so it now always reacts.\n\n" ..
+        "|cffffd200New:|r a \"Reaction frequency\" section in each skill's editor: \"Always react\" (skip the cooldown/spam-gate) and \"React every N casts\", overriding the built-in defaults per character.\n\n" ..
         "|cffffd200Changed:|r the static Party/Raid chat-type buttons are gone, replaced by two dynamic types that auto-pick whichever you're in: \"Group Start\" (on cast start, always sent) and \"Group Success\" (on cast success, normal cooldown rules). Individual lines can still force a fixed Party/Raid channel with [PARTY]/[RAID].",
+    [6] = "|cffffd200GabbaRP v1.0.5|r\n\n" ..
+        "|cffffd200Fixed:|r Create Soulstone reacted at the wrong moment: when you conjure the item, before you've even picked a target. It now waits for the item to actually be used on someone, which is also when the %t placeholder finally means something.\n\n" ..
+        "|cffffd200Fixed:|r a \"Group Start\"/\"Group Success\" override on Create Soulstone (English or the local-language mirror) could go completely silent after the change above. Both are now correctly reconnected.\n\n" ..
+        "|cffffd200New:|r a one-line heads-up on login if any settings were automatically adjusted for this version, instead of that happening completely invisibly.\n\n" ..
+        "|cffffd200New:|r /gabbarp triggerdebug now also logs every combat-log event you personally trigger, not just ones the addon already recognizes. Helpful for figuring out exactly what an item or spell fires as.",
+    [7] = "|cffffd200GabbaRP v1.0.6|r\n\n" ..
+        "|cffffd200New:|r Say/Yell reactions now have a delivery option in Settings. \"Safe\" (new default) waits for your next real action (a skill or item use) to send, so it never eats a click, just possibly a beat slower. \"Instant\" keeps the old behavior: near-zero delay, but your very next click or keypress gets swallowed.\n\n" ..
+        "|cffffd200New:|r Mind Control and Mind Vision now also whisper the target directly when successfully cast on a player, on top of their normal group-facing line. Mind Control against the opposing faction falls back to a Say translated through the Hermes addon if it's installed. Mind Vision against the opposing faction is always skipped. Both are skipped entirely against non-player targets.",
 }
 
 local changelogFrame
@@ -1403,9 +1492,13 @@ local function CreateChangelogFrame()
     f:Hide()
     tinsert(UISpecialFrames, "GRPChangelog")
 
-    f.title = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    f.title:SetPoint("TOP", f.TitleBg, "TOP", 0, -5)
-    f.title:SetText("GabbaRP -- What's New")
+    -- Gold, matching the look of Blizzard's own frame titles (e.g. the Game Menu's
+    -- "Main Menu") -- GameFontHighlight alone is plain white. GameFontNormalLarge
+    -- was tried first but ran too wide/tall for this title bar; GameFontNormal fits.
+    f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    f.title:SetPoint("TOP", f.TitleBg, "TOP", 0, -6)
+    f.title:SetTextColor(1, 0.82, 0)
+    f.title:SetText("GabbaRP - What's New")
 
     local scrollFrame = CreateFrame("ScrollFrame", "GRPChangelogScroll", f, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", 16, -30)

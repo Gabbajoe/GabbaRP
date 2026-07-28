@@ -27,6 +27,13 @@ local playerGUID
 local RANK_ALIASES = {
     ["Demon Skin"] = "Demon Armor",
     ["Detect Greater Invisibility"] = "Detect Invisibility",
+    -- Casting "Create Soulstone" only conjures the item into your bags -- no target
+    -- involved yet, see UNIT_SPELLCAST_START below. "Soulstone Resurrection" is the
+    -- cast that actually fires when the conjured item gets USED on someone, which is
+    -- the real "giving" moment these lines are meant for -- reuses the same stored
+    -- lines/chatType/settings under the "Create Soulstone" key rather than needing a
+    -- separate entry.
+    ["Soulstone Resurrection"] = "Create Soulstone",
 }
 
 -- Layered on top of the per-spell cooldown/interval below: a floor on how close
@@ -76,14 +83,23 @@ end
 
 -- Confirmed via testing: Say/Yell have required a real hardware event (an actual click
 -- or keypress) to send since patch 8.2.5/Classic 1.13.3 -- an automatic trigger like a
--- spell cast or combat log event can never provide one directly. Libs/MessageQueue.lua
--- (LenweSaralonde/MessageQueue, embedded) works around this legitimately: it queues the
--- message and flushes it on the player's next real hardware input (any click/keypress),
--- which satisfies Blizzard's requirement without user-visible delay in practice. Only
--- falls back to Emote if that library somehow failed to load.
+-- spell cast or combat log event can never provide one directly. Two ways around
+-- that, picked via GabbaRPCharDB.rp.sayYellDelivery: "safe" (default, SayYellQueue.lua
+-- -- hooks real game actions, never swallows a click, just possibly a beat slower)
+-- or "instant" (Libs/MessageQueue.lua -- near-zero delay, swallows the player's next
+-- input). Only falls back to Emote if "instant" is selected and that library somehow
+-- failed to load -- SayYellQueue.lua is part of this addon itself, so "safe" is
+-- always available.
+local function SayYellAvailable()
+    if GabbaRPCharDB.rp.sayYellDelivery == "instant" then
+        return MessageQueue and MessageQueue.SendChatMessage and true or false
+    end
+    return true
+end
+
 local function GetChatType(spellName)
     local chatType = GabbaRPCharDB.rp.customChatType[spellName] or ns.GRP_SpellChatType[spellName] or "EMOTE"
-    if (chatType == "SAY" or chatType == "YELL") and not (MessageQueue and MessageQueue.SendChatMessage) then
+    if (chatType == "SAY" or chatType == "YELL") and not SayYellAvailable() then
         return "EMOTE"
     end
     return chatType
@@ -262,6 +278,58 @@ local function TDebug(spellName, msg)
     end
 end
 
+-- Mind Control / Mind Vision get an ADDITIONAL whisper-to-target reaction, on top of
+-- (not instead of) their normal group-facing line -- separate dummy entries ("Mind
+-- Control Whisper"/"Mind Vision Whisper", plus (LOCAL) mirrors, RP_Data.lua) hold this
+-- line pool. Always a whisper to whoever was actually targeted, or (Mind Control
+-- against the opposing faction only) a Say translated through the Hermes addon's
+-- global sayToOtherFaction(msg, "SAY"|"YELL") function if it's installed -- never a
+-- fixed chat type a user picks, hence no "Send as" selector for these two in the
+-- editor (see ShowLineEditor's isWhisperDummy handling, RP_Options.lua). Skipped
+-- entirely if the target isn't an actual player (an NPC/critter/etc. can't be
+-- whispered, and Hermes only ever applies to real opposing-faction players) or if no
+-- lines are configured, same as any other reaction.
+local WHISPER_REACTION_SPELLS = {
+    ["Mind Control"] = { key = "Mind Control Whisper", hermesFallback = true },
+    ["Mind Vision"] = { key = "Mind Vision Whisper", hermesFallback = false },
+}
+
+local function TryTargetWhisperReaction(spellName, destGUID, destName)
+    local reaction = WHISPER_REACTION_SPELLS[spellName]
+    if not reaction then return end
+    if not destGUID or not destGUID:match("^Player%-") or not destName then
+        TDebug(reaction.key, "target isn't a player, nothing to whisper")
+        return
+    end
+
+    local db = GabbaRPCharDB.rp
+    if not db.enabled then return end
+    if db.disabledSpells[reaction.key] then
+        TDebug(reaction.key, "skill disabled")
+        return
+    end
+
+    local resolvedKey = ResolveSpellKey(reaction.key, ns.GabbaRP_GetGroupLanguage())
+    local lines = GetLines(resolvedKey)
+    if not lines or #lines == 0 then
+        TDebug(resolvedKey, "no lines configured")
+        return
+    end
+
+    local sameFaction = UnitFactionGroup("player") == UnitFactionGroup(destName)
+    local line = ApplyPlaceholders(PickLine(resolvedKey, lines), destName)
+
+    if sameFaction then
+        TDebug(resolvedKey, "fired (whisper to " .. destName .. ")")
+        SendChatMessage(line, "WHISPER", nil, destName)
+    elseif reaction.hermesFallback and sayToOtherFaction then
+        TDebug(resolvedKey, "fired (Hermes Say fallback, opposing faction)")
+        sayToOtherFaction(line, "SAY")
+    else
+        TDebug(resolvedKey, "opposing faction, no Hermes fallback available -- skipped")
+    end
+end
+
 local function TriggerLine(spellName, targetName, lastWords)
     local db = GabbaRPCharDB.rp
     if not db.enabled then return end
@@ -360,14 +428,14 @@ local function TriggerLine(spellName, targetName, lastWords)
     local line = ApplyPlaceholders(strippedLine, targetName, lastWords)
 
     -- A line's own [SAY]/[YELL]/[EMOTE]/[PARTY]/[RAID] tag wins over the skill's normal
-    -- chat type, with the same MessageQueue-availability downgrade GetChatType applies
-    -- above (Say/Yell need a real hardware event to send at all -- see the
-    -- C_Timer.After comment below -- so without MessageQueue loaded, an override to
-    -- either just falls back to Emote instead of silently never sending).
+    -- chat type, with the same availability downgrade GetChatType applies above
+    -- (Say/Yell need a real hardware event to send at all -- falls back to Emote
+    -- instead of silently never sending if "instant" delivery is selected and that
+    -- library isn't available).
     local effectiveChatType = chatType
     if lineChatType then
         effectiveChatType = lineChatType
-        if (effectiveChatType == "SAY" or effectiveChatType == "YELL") and not (MessageQueue and MessageQueue.SendChatMessage) then
+        if (effectiveChatType == "SAY" or effectiveChatType == "YELL") and not SayYellAvailable() then
             effectiveChatType = "EMOTE"
         end
     end
@@ -398,11 +466,14 @@ local function TriggerLine(spellName, targetName, lastWords)
     end
 
     if db.mode == "public" or db.mode == "both" then
-        if (effectiveChatType == "SAY" or effectiveChatType == "YELL") and MessageQueue and MessageQueue.SendChatMessage then
-            -- Say/Yell need a real hardware event to send at all (see GetChatType above)
-            -- -- MessageQueue queues it and flushes on the player's next actual
-            -- click/keypress, which satisfies that requirement.
-            MessageQueue.SendChatMessage(line, effectiveChatType)
+        if (effectiveChatType == "SAY" or effectiveChatType == "YELL") and SayYellAvailable() then
+            -- Say/Yell need a real hardware event to send at all (see GetChatType
+            -- above) -- routed to whichever delivery mechanism is selected.
+            if GabbaRPCharDB.rp.sayYellDelivery == "instant" then
+                MessageQueue.SendChatMessage(line, effectiveChatType)
+            else
+                ns.GabbaRP_QueueSayYell(line, effectiveChatType)
+            end
         else
             -- Deferred by one frame on purpose: TriggerLine can run synchronously inside
             -- the COMBAT_LOG_EVENT_UNFILTERED dispatch (e.g. for a self-cast like Life
@@ -627,7 +698,7 @@ local function MatchImpCategory(text)
 end
 
 StaticPopupDialogs["GABBARP_SAYYELL_WARNING"] = {
-    text = "|cffffd200GabbaRP|r\n\n|cffff8800Heads up:|r you have a skill set to Say/Yell chat.\n\nSending a Say/Yell message this way needs a real click or keypress, so it's queued and sent on your very next one. For mouse players, that means one click (e.g. your next action bar press) gets eaten by this instead of doing what you clicked.\n\nSwitch the skill to Emote in the editor if that bothers you.",
+    text = "|cffffd200GabbaRP|r\n\n|cffff8800Heads up:|r you have a skill set to Say/Yell chat, and \"Instant\" Say/Yell delivery selected in Settings.\n\nSending a Say/Yell message this way needs a real click or keypress, so it's queued and sent on your very next one. For mouse players, that means one click (e.g. your next action bar press) gets eaten by this instead of doing what you clicked.\n\nSwitch Say/Yell delivery to \"Safe\" in Settings to stop this (small delay instead, never eats a click), or switch the skill to Emote in the editor.",
     button1 = "Got it",
     timeout = 0,
     whileDead = true,
@@ -636,16 +707,20 @@ StaticPopupDialogs["GABBARP_SAYYELL_WARNING"] = {
 }
 
 -- Warns once per login (as a popup, not a chat line that's easy to miss/scroll past) if
--- the Say/Yell workaround (Libs/MessageQueue.lua) is actually going to matter for this
--- character right now -- i.e. at least one of their own class's enabled skills currently
--- resolves to Say or Yell. That workaround needs a real click/keypress to legally send a
--- chat message Blizzard didn't originate from one, so it grabs the player's very next
--- click/keypress ANYWHERE on screen to use as that trigger -- for a mouse player, that
--- means one click that was meant for something else (like the next action bar button)
--- gets eaten instead. Silent when nothing's actually configured for Say/Yell, since the
--- workaround only ever runs when a Say/Yell line can fire.
+-- the "Instant" Say/Yell delivery mode (Libs/MessageQueue.lua) is actually going to
+-- matter for this character right now -- i.e. at least one of their own class's
+-- enabled skills currently resolves to Say or Yell AND "Instant" is the selected
+-- delivery mode. That mode needs a real click/keypress to legally send a chat message
+-- Blizzard didn't originate from one, so it grabs the player's very next click/keypress
+-- ANYWHERE on screen to use as that trigger -- for a mouse player, that means one click
+-- that was meant for something else (like the next action bar button) gets eaten
+-- instead. The default "Safe" delivery mode (SayYellQueue.lua) never eats a click, so
+-- this warning is skipped entirely while that's selected. Also silent when nothing's
+-- actually configured for Say/Yell, since neither mode runs unless a Say/Yell line can
+-- fire.
 local function WarnIfSayYellConfigured()
     local db = GabbaRPCharDB.rp
+    if db.sayYellDelivery ~= "instant" then return end
     local _, playerClass = UnitClass("player")
     for spellName, class in pairs(ns.GRP_SpellClass) do
         if class == playerClass and not db.disabledSpells[spellName] then
@@ -693,15 +768,27 @@ frame:SetScript("OnEvent", function(self, event, ...)
         end
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
         local _, subevent, _, sourceGUID, _, _, _, destGUID, destName, _, _, _, spellName = CombatLogGetCurrentEventInfo()
+        -- Raw diagnostic: every combat-log event sourced from the player, regardless of
+        -- subevent or whether anything below actually reacts to it -- for tracking down
+        -- "what actually fires" cases like an item's Use: effect (e.g. applying a
+        -- Soulstone to a target), which might not be a plain SPELL_CAST_SUCCESS the
+        -- normal dispatch below expects.
+        if sourceGUID == playerGUID and GabbaRPCharDB.rp.triggerDebugLog then
+            TDebug(spellName or "?", "raw combat log event: subevent=" .. tostring(subevent) .. " dest=" .. tostring(destName))
+        end
         if subevent == "SPELL_CAST_SUCCESS" and sourceGUID == playerGUID then
-            -- GROUP_ANNOUNCE spells (including all Create Soulstone ranks, normalized to
-            -- the base name at the UNIT_SPELLCAST_START dispatch site below) are handled
-            -- entirely by AnnounceGroupCast on cast start -- including the solo case now,
-            -- see its own EMOTE fallback. TriggerLine self-guards against calling it again
-            -- here (GetChatType(spellName) == "GROUP_ANNOUNCE"), so this is a plain,
-            -- unconditional dispatch for every other spell.
+            -- GROUP_ANNOUNCE spells (Ritual of Summoning, Portals) are handled entirely
+            -- by AnnounceGroupCast on cast start instead -- including the solo case,
+            -- see its own EMOTE fallback. TriggerLine self-guards against calling it
+            -- again here (GetChatType(spellName) == "GROUP_ANNOUNCE"), so this is a
+            -- plain, unconditional dispatch for every other spell. RANK_ALIASES covers
+            -- spells that share one line pool/config under a different rank/related
+            -- name (Demon Skin, Detect Greater Invisibility, and Soulstone Resurrection
+            -- -- the item-use cast that actually applies "Create Soulstone"'s lines,
+            -- since casting Create Soulstone itself only conjures the item).
             spellName = RANK_ALIASES[spellName] or spellName
             TriggerLine(ResolveSpellKey(spellName, ns.GabbaRP_GetGroupLanguage()), destName)
+            TryTargetWhisperReaction(spellName, destGUID, destName)
         elseif subevent == "SPELL_AURA_APPLIED" and destGUID == playerGUID and sourceGUID == playerGUID then
             -- for buff procs like Nightfall/"Shadow Trance" that aren't a cast of your own --
             -- sourceGUID must ALSO be the player, not just destGUID, otherwise this fires
@@ -761,15 +848,18 @@ frame:SetScript("OnEvent", function(self, event, ...)
         local unit, _, spellID = ...
         if unit == "player" then
             local spellName = GetSpellInfo(spellID)
-            if spellName then
-                -- Same rank-name normalization as the combat-log Soulstone handling
-                -- below -- without it, AnnounceGroupCast (and the "warn the group
-                -- before a long cast finishes" pre-cast announcement it's for) never
-                -- fires for any rank except the one exact rank named bare "Create
-                -- Soulstone", since chatType is only configured under that base key.
-                if spellName:find("^Create Soulstone%f[%A]") then
-                    spellName = "Create Soulstone"
-                end
+            -- Deliberately NOT reacting to any "Create Soulstone" rank here anymore --
+            -- that cast only CONJURES the item into your bags, with no target involved
+            -- yet (the %t in these lines wouldn't even mean anything at this point).
+            -- The actual "giving" moment -- and the only place %t makes sense -- is
+            -- when the conjured Soulstone item gets USED on someone: a real, multi-
+            -- second cast (confirmed live -- "begins casting Soulstone Resurrection" in
+            -- the default combat log), so it needs the same RANK_ALIASES normalization
+            -- applied here as the COMBAT_LOG_EVENT_UNFILTERED handler below does, or a
+            -- "Group Start" chatType override on "Create Soulstone" would never
+            -- actually fire for it.
+            if spellName and not spellName:find("^Create Soulstone%f[%A]") then
+                spellName = RANK_ALIASES[spellName] or spellName
                 AnnounceGroupCast(ResolveSpellKey(spellName, ns.GabbaRP_GetGroupLanguage()), UnitName("target"))
             end
         end

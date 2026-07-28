@@ -500,6 +500,23 @@ ns.GRP_Spells = {
         "let's see what you see.",
         "peeking through your eyes for a moment.",
     },
+    -- Dummy entries, not a real spell name -- hold the line pool for the separate
+    -- whisper-to-target reaction Mind Control/Mind Vision get (see RP_Core.lua's
+    -- TryTargetWhisperReaction), fired ALONGSIDE the normal group-facing line above,
+    -- not instead of it. Always sent as a whisper to whoever was actually targeted, or
+    -- (Mind Control against the opposing faction only) via the Hermes addon's Say
+    -- translation if installed -- never a fixed chat type a user picks, so these don't
+    -- get the usual "Send as" selector in the editor.
+    ["Mind Vision Whisper"] = {
+        "Just borrowing your eyes for a moment.",
+        "Relax, I'm only looking.",
+        "Didn't mean to intrude, just curious what you're up to.",
+    },
+    ["Mind Vision Whisper (LOCAL)"] = {
+        "Ich leih mir nur kurz deine Augen.",
+        "Entspann dich, ich schau nur.",
+        "Wollte nicht stören, war nur neugierig was du so treibst.",
+    },
     ["Divine Spirit"] = {
         "a clearer mind, a steadier spirit.",
         "the light sharpens your focus.",
@@ -515,6 +532,21 @@ ns.GRP_Spells = {
     ["Mind Control"] = {
         "your will is mine, for now.",
         "just do as I say.",
+    },
+    ["Mind Control Whisper"] = {
+        "Your mind belongs to me now. Don't fight it, it's easier that way.",
+        "Just do as I say, this will be over soon.",
+        "Relax. Struggling only makes this worse.",
+    },
+    -- (LOCAL) mirror requested specifically for these two whisper entries, even though
+    -- GabbaRP doesn't otherwise carry local-language content for regular skills yet --
+    -- a private whisper (or a Hermes-translated Say to the opposing faction) reads
+    -- more naturally in the target's own language than the rest of this addon's
+    -- group-facing English lines.
+    ["Mind Control Whisper (LOCAL)"] = {
+        "Dein Wille gehört jetzt mir. Wehr dich nicht, das macht es nur leichter.",
+        "Tu einfach, was ich sage, dann ist es gleich vorbei.",
+        "Entspann dich. Gegenwehr macht es nur schlimmer.",
     },
     ["Holy Fire"] = {
         "burn in righteousness.",
@@ -1183,10 +1215,14 @@ ns.GRP_SpellClass = {
     ["Prayer of Healing"] = "PRIEST",
     ["Power Word: Fortitude"] = "PRIEST",
     ["Mind Vision"] = "PRIEST",
+    ["Mind Vision Whisper"] = "PRIEST",
+    ["Mind Vision Whisper (LOCAL)"] = "PRIEST",
     ["Divine Spirit"] = "PRIEST",
     ["Inner Fire"] = "PRIEST",
     ["Shackle Undead"] = "PRIEST",
     ["Mind Control"] = "PRIEST",
+    ["Mind Control Whisper"] = "PRIEST",
+    ["Mind Control Whisper (LOCAL)"] = "PRIEST",
     ["Holy Fire"] = "PRIEST",
     ["Abolish Disease"] = "PRIEST",
     ["Inner Focus"] = "PRIEST",

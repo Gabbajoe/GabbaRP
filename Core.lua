@@ -67,6 +67,16 @@ local CHAR_DB_DEFAULTS = {
         triggerChance = ns.GRP_DEFAULT_TRIGGER_CHANCE, -- percent chance a line actually fires once eligible
         customLines = {},
         customChatType = {},
+        -- How Say/Yell reactions actually get sent -- Blizzard requires a real
+        -- click/keypress for those, which a spell cast (or any other automatic
+        -- trigger) never is. "safe" (default): hooks the functions real game actions
+        -- go through (UseAction/CastSpellByName/CastSpellByID/UseInventoryItem) and
+        -- piggybacks on the next one -- hooksecurefunc can't cancel/replace what it
+        -- hooks, so nothing is ever lost, just possibly a beat slower than "instant".
+        -- "instant": the old SayYellQueue.lua predecessor (Libs/MessageQueue.lua)
+        -- behavior -- captures the player's literal next hardware input anywhere on
+        -- screen for near-zero delay, but that input's own action doesn't happen.
+        sayYellDelivery = "safe", -- "safe" | "instant"
         -- Per-spell overrides for the "spammy vs. never-throttle" gate (RP_Core.lua's
         -- PassesGlobalGate/bypassesGlobalGate check), editable via the line editor.
         -- customSkipGate[name] = true/false always wins over ns.GRP_SkipGlobalGate's
@@ -143,7 +153,7 @@ end
 -- friend's own copy of this addon) is -- every migration it missed replays in sequence on
 -- next load. Old steps are safe to leave here indefinitely; they're cheap and only run for
 -- characters that still need them.
-local CHAR_SCHEMA_VERSION = 2
+local CHAR_SCHEMA_VERSION = 4
 
 local MIGRATIONS = {
     -- The static "Party"/"Raid" chat-type buttons were removed from the line editor --
@@ -160,6 +170,28 @@ local MIGRATIONS = {
             end
         end
     end,
+    [3] = function(db)
+        -- "Create Soulstone" no longer reacts on its own cast (that only conjures the
+        -- item -- see RP_Core.lua's UNIT_SPELLCAST_START handler) -- it now fires when
+        -- the conjured item is actually USED on someone ("Soulstone Resurrection",
+        -- aliased to this same stored key). That's a normal cast-success moment, not a
+        -- multi-second cast worth a cast-start pre-warning, so a "Group Start"
+        -- (GROUP_ANNOUNCE) override -- which is ONLY ever fired from cast-start -- would
+        -- now go completely silent instead. Remapped to "Group Success" (cast-success,
+        -- same dynamic Party/Raid auto-channel), which is what this spell actually needs.
+        if db.rp and db.rp.customChatType and db.rp.customChatType["Create Soulstone"] == "GROUP_ANNOUNCE" then
+            db.rp.customChatType["Create Soulstone"] = "GROUP_SUCCESS"
+        end
+    end,
+    [4] = function(db)
+        -- Same as migration [3] above, but for the local-language mirror key -- missed
+        -- the first time around. Confirmed live: a character whose group-language
+        -- resolved to "local" for a Soulstone cast hit exactly this unmigrated key and
+        -- went silent the same way the English one would have.
+        if db.rp and db.rp.customChatType and db.rp.customChatType["Create Soulstone (LOCAL)"] == "GROUP_ANNOUNCE" then
+            db.rp.customChatType["Create Soulstone (LOCAL)"] = "GROUP_SUCCESS"
+        end
+    end,
 }
 
 local function RunMigrations(db, isNewCharacter)
@@ -170,12 +202,20 @@ local function RunMigrations(db, isNewCharacter)
         db.schemaVersion = CHAR_SCHEMA_VERSION
         return
     end
-    local v = db.schemaVersion or 0
+    local startingVersion = db.schemaVersion or 0
+    local v = startingVersion
     while v < CHAR_SCHEMA_VERSION do
         v = v + 1
         if MIGRATIONS[v] then MIGRATIONS[v](db) end
     end
     db.schemaVersion = CHAR_SCHEMA_VERSION
+    -- One short, generic heads-up when at least one migration actually ran -- no
+    -- per-step detail (these are silent, deterministic data changes with no
+    -- interesting success/failure state), just visibility that something changed in
+    -- the background after an addon update.
+    if startingVersion < CHAR_SCHEMA_VERSION then
+        ns.GabbaRP_Print("Some settings were automatically updated for this version. /gabbarp report if anything looks off.")
+    end
 end
 
 local function GabbaRP_EnsureDefaults()
@@ -212,8 +252,8 @@ function ns.GabbaRP_PrintReport()
     ns.GabbaRP_Print(string.format("Addon: v%s (schema %d)", tostring(version), GabbaRPCharDB.schemaVersion or 0))
     ns.GabbaRP_Print(string.format("Client: %s (build %s, interface %s)", tostring(clientVersion), tostring(clientBuild), tostring(tocVersion)))
     ns.GabbaRP_Print(string.format("Character: %s-%s, %s", tostring(name), tostring(realm), tostring(className)))
-    ns.GabbaRP_Print(string.format("RP: enabled=%s mode=%s anim=%s localLanguage=%s soloLanguage=%s",
-        tostring(db.enabled), tostring(db.mode), tostring(db.anim), tostring(db.localLanguageEnabled), tostring(db.soloLanguage)))
+    ns.GabbaRP_Print(string.format("RP: enabled=%s mode=%s anim=%s localLanguage=%s soloLanguage=%s sayYellDelivery=%s",
+        tostring(db.enabled), tostring(db.mode), tostring(db.anim), tostring(db.localLanguageEnabled), tostring(db.soloLanguage), tostring(db.sayYellDelivery)))
     ns.GabbaRP_Print(string.format("Spam protection: perSkillCooldown=%ds globalCooldown=%ds triggerChance=%s%%",
         db.perSkillCooldown or 0, db.globalCooldown or 0, tostring(db.triggerChance)))
     ns.GabbaRP_Print(string.format("Debug flags: impdebug=%s greetdebug=%s triggerdebug=%s (%d log entries stored)",
