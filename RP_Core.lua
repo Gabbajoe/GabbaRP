@@ -261,8 +261,17 @@ local function ApplyPlaceholders(line, targetName, lastWords)
     return line
 end
 
+-- Zoning (entering/leaving an instance, taking a portal, etc.) can make the server
+-- resend SPELL_AURA_APPLIED for a long-duration self-buff you already had up (Demon
+-- Armor and the like), not a real new cast -- confirmed live: a "Demon Armor" line
+-- fired the instant a character zoned into an instance despite no cast happening.
+-- Suppressed for a couple seconds after PLAYER_ENTERING_WORLD so this resync artifact
+-- doesn't read as a genuine cast.
+local justZoned = false
+
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("PLAYER_LOGIN")
+frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 frame:RegisterEvent("CHAT_MSG_MONSTER_SAY")
 frame:RegisterEvent("CHAT_MSG_MONSTER_YELL")
@@ -789,11 +798,12 @@ frame:SetScript("OnEvent", function(self, event, ...)
             spellName = RANK_ALIASES[spellName] or spellName
             TriggerLine(ResolveSpellKey(spellName, ns.GabbaRP_GetGroupLanguage()), destName)
             TryTargetWhisperReaction(spellName, destGUID, destName)
-        elseif subevent == "SPELL_AURA_APPLIED" and destGUID == playerGUID and sourceGUID == playerGUID then
+        elseif subevent == "SPELL_AURA_APPLIED" and destGUID == playerGUID and sourceGUID == playerGUID and not justZoned then
             -- for buff procs like Nightfall/"Shadow Trance" that aren't a cast of your own --
             -- sourceGUID must ALSO be the player, not just destGUID, otherwise this fires
             -- whenever anyone else's buff lands on you (e.g. another priest's Power Word:
-            -- Shield/Fortitude), reacting as if you had cast it yourself
+            -- Shield/Fortitude), reacting as if you had cast it yourself. justZoned skips the
+            -- zone-transition aura resync artifact described above.
             TriggerLine(ResolveSpellKey(spellName, ns.GabbaRP_GetGroupLanguage()))
         elseif subevent == "UNIT_DIED" and destGUID ~= playerGUID and destName then
             -- Party/raid membership MUST be checked before scheduling anything below --
@@ -839,6 +849,9 @@ frame:SetScript("OnEvent", function(self, event, ...)
                 end)
             end
         end
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        justZoned = true
+        C_Timer.After(2, function() justZoned = false end)
     elseif event == "UNIT_AURA" then
         local unit = ...
         if unit == "player" then
