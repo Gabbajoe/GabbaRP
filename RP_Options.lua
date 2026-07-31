@@ -918,7 +918,7 @@ function ns.GabbaRP_BuildGeneralPanel(parent)
 
     -- === Say/Yell Delivery ===
     local sayYellDesc = AddSection(f, prevAnchor, "Say/Yell Delivery",
-        "Blizzard requires a real click/keypress to send Say/Yell -- this picks how that requirement gets satisfied.")
+        "Blizzard requires a real click/keypress to send Say/Yell. This picks how that requirement gets satisfied.")
 
     local SAY_YELL_MODES = {
         { key = "safe", label = "Safe (default)" },
@@ -1078,7 +1078,7 @@ function ns.GabbaRP_BuildGeneralPanel(parent)
 
     -- === Spam Protection ===
     local spamDesc = AddSection(f, suppressGroupRaidDesc, "Spam Protection",
-        "Three layers, checked in order: (1) the same skill won't comment again until its own cooldown below has passed (skills cast very rapidly, like Life Tap, instead only trigger every couple of casts, not on a timer -- not configurable here). (2) a floor on how close together ANY two lines can land, regardless of which skill. (3) a random chance to stay quiet even when nothing else blocked it. Together these keep the module from feeling like it comments on literally everything.")
+        "Three layers, checked in order: (1) the same skill won't comment again until its own cooldown below has passed (skills cast very rapidly, like Life Tap, instead only trigger every couple of casts, not on a timer; not configurable here). (2) a floor on how close together ANY two lines can land, regardless of which skill. (3) a random chance to stay quiet even when nothing else blocked it. Together these keep the module from feeling like it comments on literally everything.")
 
     -- OptionsSliderTemplate needs a real global name -- its Low/High/Text labels are XML
     -- child regions wired up via "$parent" name substitution.
@@ -1437,7 +1437,7 @@ end
 -- anyone behind sees every entry they missed concatenated, not just the latest.
 ----------------------------------------------------------------------
 
-local CHANGELOG_VERSION = 7
+local CHANGELOG_VERSION = 8
 -- Exposed so Core.lua's GabbaRP_EnsureDefaults can stamp brand-new characters as
 -- already-current (a fresh install has nothing to "catch up" on, so it shouldn't see a
 -- changelog immediately) without this file needing to load before that logic runs.
@@ -1475,6 +1475,8 @@ local CHANGELOG = {
     [7] = "|cffffd200GabbaRP v1.0.6|r\n\n" ..
         "|cffffd200New:|r Say/Yell reactions now have a delivery option in Settings. \"Safe\" (new default) waits for your next real action (a skill or item use) to send, so it never eats a click, just possibly a beat slower. \"Instant\" keeps the old behavior: near-zero delay, but your very next click or keypress gets swallowed.\n\n" ..
         "|cffffd200New:|r Mind Control and Mind Vision now also whisper the target directly when successfully cast on a player, on top of their normal group-facing line. Mind Control against the opposing faction falls back to a Say translated through the Hermes addon if it's installed. Mind Vision against the opposing faction is always skipped. Both are skipped entirely against non-player targets.",
+    [8] = "|cffffd200GabbaRP v1.0.7|r\n\n" ..
+        "|cffffd200Fixed:|r a self-buff line (e.g. Demon Armor) could fire on its own right when zoning into an instance or through a portal, with no actual cast involved. The game can resend an \"aura applied\" event for a buff you already had up during a zone transition; that resync is now recognized and ignored instead of read as a fresh cast.",
 }
 
 local changelogFrame
