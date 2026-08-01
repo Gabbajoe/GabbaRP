@@ -46,6 +46,10 @@ Blizzard requires a real click or keypress before an addon is allowed to send a 
 
 This only matters if you have a skill configured to send **Say** or **Yell** specifically (Emote, the default for most skills, isn't affected) while **Instant** delivery is selected. GabbaRP shows a one-time popup at login if any of your currently enabled skills are set that way, as a reminder. Switch the skill back to Emote in the line editor, or stay on **Safe** delivery, if this bothers you.
 
+## Get Involved
+
+Found a skill that's missing a line, or one that should react but doesn't? Have an idea for a new feature? Open an issue on GitHub: **https://github.com/Gabbajoe/GabbaRP/issues**. Missing-skill reports are especially useful since there are hundreds of spells across 9 classes and it's easy for a niche one to slip through.
+
 ## Changelog
 
 ### V1.0.7
