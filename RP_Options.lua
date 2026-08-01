@@ -1204,7 +1204,7 @@ end
 --   line one.
 ----------------------------------------------------------------------
 
-local CHAT_TYPE_SET = { EMOTE = true, SAY = true, YELL = true, PARTY = true, RAID = true, GUILD = true, GROUP_ANNOUNCE = true }
+local CHAT_TYPE_SET = { EMOTE = true, SAY = true, YELL = true, PARTY = true, RAID = true, GUILD = true, GROUP_ANNOUNCE = true, GROUP_SUCCESS = true }
 local GREETING_CATS = { "join", "welcome" }
 local GREETING_TIMES = { "morning", "midday", "evening", "night" }
 

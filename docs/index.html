@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GabbaRP — Line Pack Builder</title>
+<meta name="description" content="Compose GabbaRP flavor lines, Death Reactions, and Greetings in a full editor, then export a block to paste into the in-game Import box.">
+<style>
+  :root {
+    --bg: #1a1512;
+    --surface: #221b16;
+    --surface-2: #2b221b;
+    --border: #3c3025;
+    --text: #ece3d6;
+    --text-muted: #9c8f7d;
+    --text-faint: #6f6455;
+    --accent: #dda23f;
+    --accent-dim: #a97b32;
+    --success: #7bc47f;
+    --danger: #c96a5f;
+    --font-display: Georgia, 'Iowan Old Style', 'Palatino Linotype', serif;
+    --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f3ede1; --surface: #ffffff; --surface-2: #ece3d2; --border: #d8cbb2;
+      --text: #2b2115; --text-muted: #6b5d47; --text-faint: #93826a;
+      --accent: #a8701f; --accent-dim: #8a5a15; --success: #3f8f47; --danger: #a8483d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font-body); line-height: 1.5; }
+  a { color: var(--accent); }
+
+  .page { max-width: 1180px; margin: 0 auto; padding: 28px 20px 80px; }
+
+  header.top { margin-bottom: 28px; }
+  header.top h1 {
+    font-family: var(--font-display); font-size: clamp(1.6rem, 3vw, 2.1rem);
+    margin: 0 0 6px; color: var(--accent); text-wrap: balance;
+  }
+  header.top p { margin: 0 0 6px; color: var(--text-muted); max-width: 68ch; }
+  header.top p.small { font-size: 0.85rem; color: var(--text-faint); }
+
+  .layout { display: grid; grid-template-columns: 210px 1fr; gap: 28px; align-items: start; }
+  @media (max-width: 780px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.side { position: static !important; }
+  }
+
+  nav.side {
+    position: sticky; top: 20px; display: flex; flex-direction: column; gap: 4px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px;
+  }
+  nav.side .navlabel { font-family: var(--font-display); color: var(--accent); font-size: 0.95rem; margin: 10px 0 4px; }
+  nav.side .navlabel:first-child { margin-top: 0; }
+  nav.side select { width: 100%; margin-bottom: 4px; }
+  nav.side a.navlink { display: block; padding: 6px 8px; border-radius: 6px; color: var(--text-muted); text-decoration: none; font-size: 0.92rem; }
+  nav.side a.navlink:hover { background: var(--surface-2); color: var(--text); }
+
+  select, textarea, input[type=text] {
+    background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; font-family: inherit; padding: 6px 8px;
+  }
+  textarea { font-family: var(--font-mono); font-size: 0.86rem; resize: vertical; width: 100%; }
+
+  section.block { margin-bottom: 36px; }
+  section.block h2 {
+    font-family: var(--font-display); color: var(--accent); border-bottom: 1px solid var(--border);
+    padding-bottom: 8px; margin: 0 0 6px; scroll-margin-top: 16px;
+  }
+  section.block > p.hint { color: var(--text-muted); font-size: 0.9rem; margin: 0 0 16px; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+
+  details.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0; }
+  details.card > summary {
+    list-style: none; cursor: pointer; padding: 10px 12px; display: flex;
+    align-items: center; justify-content: space-between; gap: 8px; font-weight: 600;
+  }
+  details.card > summary::-webkit-details-marker { display: none; }
+  details.card > summary .arrow { color: var(--text-faint); transition: transform 0.15s ease; flex-shrink: 0; }
+  details.card[open] > summary .arrow { transform: rotate(90deg); }
+  details.card > summary .count { color: var(--text-faint); font-weight: 400; font-size: 0.82rem; margin-left: auto; margin-right: 4px; }
+  .card-body { padding: 0 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .card-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .card-row select { flex: 1; min-width: 140px; }
+
+  .lang-block { border: 1px solid var(--border); border-radius: 6px; padding: 8px; background: var(--bg); }
+  .lang-block .lang-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-faint); margin-bottom: 6px; display: block; }
+  .lang-block.local { border-style: dashed; }
+
+  button {
+    font-family: inherit; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text); padding: 6px 12px; cursor: pointer; font-size: 0.86rem;
+  }
+  button:hover { border-color: var(--accent-dim); color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #241b0f; font-weight: 600; }
+  button.primary:hover { background: var(--accent-dim); border-color: var(--accent-dim); color: #241b0f; }
+  button.small { padding: 3px 8px; font-size: 0.78rem; }
+  button.ghost { background: transparent; }
+
+  .export-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .export-actions { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+  #copyFeedback { color: var(--success); font-size: 0.86rem; opacity: 0; transition: opacity 0.2s ease; }
+  #copyFeedback.show { opacity: 1; }
+  #exportOutput { min-height: 220px; }
+
+  .import-toggle { margin-top: 20px; }
+  #importArea { min-height: 140px; margin-top: 8px; }
+  #importStatus { font-size: 0.86rem; color: var(--text-muted); margin-top: 8px; white-space: pre-wrap; }
+
+  #loadError { color: var(--danger); }
+
+  footer.note {
+    margin-top: 40px; color: var(--text-faint); font-size: 0.82rem;
+    border-top: 1px solid var(--border); padding-top: 14px;
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="top">
+    <h1>GabbaRP — Line Pack Builder</h1>
+    <p>Compose flavor lines for every skill, Food &amp; Drink, Death Reactions, and Group Greetings in a proper editor, in English and (if you use it) your Local Language, then generate a text block to paste into the in-game Import box.</p>
+    <p class="small">Nothing here touches your account or sends anything anywhere. It's a text generator that runs entirely in your browser. Default lines are generated directly from the addon's own source, so they always match what's actually shipped.</p>
+  </header>
+
+  <div id="loadError" style="display:none;"></div>
+
+  <div class="layout" id="appRoot" style="display:none;">
+    <nav class="side">
+      <div class="navlabel">Class Skills</div>
+      <select id="classSelect"></select>
+      <div class="navlabel">Jump to</div>
+      <a class="navlink" href="#food-section">Food &amp; Drink</a>
+      <a class="navlink" href="#death-section">Death Reactions</a>
+      <a class="navlink" href="#greetings-section">Greetings</a>
+      <a class="navlink" href="#export-section">Export</a>
+    </nav>
+
+    <main>
+      <section class="block" id="class-section">
+        <h2 id="classHeading">Skills</h2>
+        <p class="hint">Each card starts pre-filled with the shipped default lines. Edit, add, or remove lines freely, "Reset" restores just that skill. The Local Language block ships empty for every skill except Mind Control/Mind Vision Whisper, since GabbaRP ships English-only by default.</p>
+        <div class="cards" id="classCards"></div>
+      </section>
+
+      <section class="block" id="food-section">
+        <h2>Food &amp; Drink</h2>
+        <p class="hint">The combined one fires instead of the individual lines when both buffs are up at once.</p>
+        <div class="cards" id="foodCards"></div>
+      </section>
+
+      <section class="block" id="death-section">
+        <h2>Death Reactions</h2>
+        <p class="hint">Group/Raid fire in your party/raid chat when someone in your group dies. Guild always fires in Guild chat, via the optional DeathNotificationLib addon, whenever any guildmate dies, whether you're grouped with them or not.</p>
+        <div class="cards" id="deathCards"></div>
+      </section>
+
+      <section class="block" id="greetings-section">
+        <h2>Group Greetings</h2>
+        <p class="hint">"Join" fires once when you join a group; "Welcome" greets each new member by name (use %t), both split by time of day.</p>
+        <div class="cards" id="greetingCards"></div>
+      </section>
+
+      <section class="block" id="export-section">
+        <h2>Export</h2>
+        <p class="hint">Generates a block for everything currently shown above (the selected class + Food &amp; Drink + Death Reactions + Greetings, English and Local Language both). Paste the result into the in-game "Import" box.</p>
+        <div class="export-panel">
+          <div class="export-actions">
+            <button class="primary" id="generateBtn">Generate Export Text</button>
+            <button id="copyBtn">Copy to Clipboard</button>
+            <span id="copyFeedback">Copied!</span>
+          </div>
+          <textarea id="exportOutput" spellcheck="false" placeholder="Click &quot;Generate Export Text&quot; above..."></textarea>
+
+          <div class="import-toggle">
+            <button class="ghost small" id="importToggleBtn">▸ Load an existing export to edit it here instead</button>
+            <div id="importPanel" style="display:none;">
+              <textarea id="importArea" spellcheck="false" placeholder="Paste previously exported text here..."></textarea>
+              <div class="export-actions" style="margin-top:8px;">
+                <button class="primary" id="loadBtn">Load into editor</button>
+              </div>
+              <div id="importStatus"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <footer class="note">
+    Built for the <a href="https://github.com/Gabbajoe/GabbaRP">GabbaRP</a> WoW Classic Era addon. Default lines embedded here are generated directly from the addon's own data files at release time, so they always match what's actually shipped. Found a bug or a missing skill? <a href="https://github.com/Gabbajoe/GabbaRP/issues">Open an issue</a>.
+  </footer>
+</div>
+
+<script>
+const CHAT_TYPES = [
+  { key: "EMOTE", label: "Emote (/me)" },
+  { key: "SAY", label: "Say" },
+  { key: "YELL", label: "Yell" },
+  { key: "GUILD", label: "Guild" },
+  { key: "GROUP_ANNOUNCE", label: "Group Start (on cast, always sent)" },
+  { key: "GROUP_SUCCESS", label: "Group Success (on cast success)" },
+];
+// Accepted when READING a pasted export (so an older character's export still loads
+// cleanly), even though only the six types above are ever offered as a fresh choice --
+// PARTY/RAID were the addon's own chat-type options before the dynamic Group Start/Success
+// types replaced them.
+const CHAT_TYPE_READ_SET = new Set(["EMOTE", "SAY", "YELL", "GUILD", "GROUP_ANNOUNCE", "GROUP_SUCCESS", "PARTY", "RAID"]);
+
+const EXCLUDE_FROM_CLASS_LIST = new Set(["Food", "Drink", "Food and Drink"]);
+const DEATH_NAMES = ["Death: Group", "Death: Raid", "Death: Guild"];
+const FOOD_NAMES = ["Food", "Drink", "Food and Drink"];
+
+let DATA = null;
+
+function titleCase(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
+
+function chatTypeOptionsHtml(selected) {
+  return CHAT_TYPES.map(ct =>
+    `<option value="${ct.key}"${ct.key === selected ? " selected" : ""}>${ct.label}</option>`
+  ).join("");
+}
+
+function langBlockHtml(cls, label, lines, chatTypeValue, showChatType) {
+  return `
+    <div class="lang-block ${cls}">
+      <span class="lang-label">${label}</span>
+      ${showChatType ? `<div class="card-row" style="margin-bottom:6px;">
+        <label style="color:var(--text-muted);font-size:0.82rem;">Send as</label>
+        <select class="ct-select">${chatTypeOptionsHtml(chatTypeValue)}</select>
+      </div>` : ""}
+      <textarea class="lines-area" rows="4">${(lines || []).join("\n")}</textarea>
+    </div>
+  `;
+}
+
+function buildSkillCard(name, opts) {
+  opts = opts || {};
+  const enLines = DATA.spells[name] || [];
+  const localLines = DATA.spellsLocal[name] || [];
+  const enChatType = DATA.chatType[name] || "EMOTE";
+  const localChatType = DATA.chatTypeLocal[name] || "EMOTE";
+  const showChatType = opts.chatType !== false;
+
+  const card = document.createElement("details");
+  card.className = "card";
+  card.dataset.name = name;
+
+  card.innerHTML = `
+    <summary>
+      <span class="arrow">▸</span>
+      <span>${name}</span>
+      <span class="count">${enLines.length} line${enLines.length === 1 ? "" : "s"}</span>
+    </summary>
+    <div class="card-body">
+      ${langBlockHtml("en", "English", enLines, enChatType, showChatType)}
+      ${langBlockHtml("local", "Local Language", localLines, localChatType, showChatType)}
+      <div class="card-row">
+        <button class="small reset-btn ghost">Reset to default</button>
+      </div>
+    </div>
+  `;
+
+  const countEl = card.querySelector(".count");
+  const enTextarea = card.querySelector(".lang-block.en .lines-area");
+  const resetBtn = card.querySelector(".reset-btn");
+
+  function updateCount() {
+    const n = enTextarea.value.split("\n").map(s => s.trim()).filter(Boolean).length;
+    countEl.textContent = n + " line" + (n === 1 ? "" : "s");
+  }
+  enTextarea.addEventListener("input", updateCount);
+
+  resetBtn.addEventListener("click", () => {
+    enTextarea.value = enLines.join("\n");
+    card.querySelector(".lang-block.local .lines-area").value = localLines.join("\n");
+    const enSel = card.querySelector(".lang-block.en .ct-select");
+    const localSel = card.querySelector(".lang-block.local .ct-select");
+    if (enSel) enSel.value = enChatType;
+    if (localSel) localSel.value = localChatType;
+    updateCount();
+  });
+
+  return card;
+}
+
+function buildGreetingCard(category, time) {
+  const enLines = DATA.greetings[category][time];
+  const localLines = (DATA.greetingsLocal[category] && DATA.greetingsLocal[category][time]) || [];
+  const label = titleCase(category) + " / " + titleCase(time);
+  const card = document.createElement("details");
+  card.className = "card";
+  card.dataset.category = category;
+  card.dataset.time = time;
+
+  card.innerHTML = `
+    <summary>
+      <span class="arrow">▸</span>
+      <span>${label}</span>
+      <span class="count">${enLines.length} line${enLines.length === 1 ? "" : "s"}</span>
+    </summary>
+    <div class="card-body">
+      ${langBlockHtml("en", "English", enLines, null, false)}
+      ${langBlockHtml("local", "Local Language", localLines, null, false)}
+      <div class="card-row">
+        <button class="small reset-btn ghost">Reset to default</button>
+      </div>
+    </div>
+  `;
+
+  const countEl = card.querySelector(".count");
+  const enTextarea = card.querySelector(".lang-block.en .lines-area");
+  const resetBtn = card.querySelector(".reset-btn");
+
+  function updateCount() {
+    const n = enTextarea.value.split("\n").map(s => s.trim()).filter(Boolean).length;
+    countEl.textContent = n + " line" + (n === 1 ? "" : "s");
+  }
+  enTextarea.addEventListener("input", updateCount);
+  resetBtn.addEventListener("click", () => {
+    enTextarea.value = enLines.join("\n");
+    card.querySelector(".lang-block.local .lines-area").value = localLines.join("\n");
+    updateCount();
+  });
+
+  return card;
+}
+
+function renderClassCards(className) {
+  const container = document.getElementById("classCards");
+  container.innerHTML = "";
+  document.getElementById("classHeading").textContent = titleCase(className) + " Skills";
+
+  const names = Object.keys(DATA.spellClass)
+    .filter(n => DATA.spellClass[n] === className && !EXCLUDE_FROM_CLASS_LIST.has(n))
+    .sort();
+
+  for (const name of names) {
+    container.appendChild(buildSkillCard(name));
+  }
+}
+
+function renderFoodCards() {
+  const container = document.getElementById("foodCards");
+  container.innerHTML = "";
+  for (const name of FOOD_NAMES) {
+    container.appendChild(buildSkillCard(name));
+  }
+}
+
+function renderDeathCards() {
+  const container = document.getElementById("deathCards");
+  container.innerHTML = "";
+  for (const name of DEATH_NAMES) {
+    container.appendChild(buildSkillCard(name));
+  }
+}
+
+function renderGreetingCards() {
+  const container = document.getElementById("greetingCards");
+  container.innerHTML = "";
+  for (const cat of ["join", "welcome"]) {
+    for (const time of ["morning", "midday", "evening", "night"]) {
+      container.appendChild(buildGreetingCard(cat, time));
+    }
+  }
+}
+
+function init() {
+  const classSet = new Set();
+  for (const name in DATA.spellClass) {
+    const c = DATA.spellClass[name];
+    if (c !== "ALL") classSet.add(c);
+  }
+  const classes = Array.from(classSet).sort();
+
+  const select = document.getElementById("classSelect");
+  select.innerHTML = classes.map(c => `<option value="${c}">${titleCase(c)}</option>`).join("");
+  select.value = classes[0];
+  select.addEventListener("change", () => renderClassCards(select.value));
+
+  renderClassCards(select.value);
+  renderFoodCards();
+  renderDeathCards();
+  renderGreetingCards();
+
+  document.getElementById("appRoot").style.display = "";
+}
+
+fetch("data.json")
+  .then(r => {
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  })
+  .then(json => {
+    DATA = json;
+    init();
+  })
+  .catch(err => {
+    const el = document.getElementById("loadError");
+    el.style.display = "";
+    el.textContent = "Couldn't load data.json (" + err.message + "). If you're viewing this file locally, serve it over http:// instead of opening it directly (file:// blocks fetch()), e.g. `python3 -m http.server` in this folder.";
+  });
+
+// ---------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------
+
+function linesFromTextarea(el) {
+  return el.value.split("\n").map(s => s.trim()).filter(Boolean);
+}
+
+function generateExport() {
+  const parts = ["# GabbaRP export v1", ""];
+
+  function emitPair(name, card) {
+    const enTa = card.querySelector(".lang-block.en .lines-area");
+    const enCt = card.querySelector(".lang-block.en .ct-select");
+    parts.push("[" + name + (enCt ? ": " + enCt.value : "") + "]");
+    for (const l of linesFromTextarea(enTa)) parts.push(l);
+    parts.push("");
+
+    const localTa = card.querySelector(".lang-block.local .lines-area");
+    const localCt = card.querySelector(".lang-block.local .ct-select");
+    parts.push("[" + name + " (LOCAL)" + (localCt ? ": " + localCt.value : "") + "]");
+    for (const l of linesFromTextarea(localTa)) parts.push(l);
+    parts.push("");
+  }
+
+  const classCards = Array.from(document.querySelectorAll("#classCards > .card"))
+    .sort((a, b) => a.dataset.name.localeCompare(b.dataset.name));
+  for (const card of classCards) emitPair(card.dataset.name, card);
+
+  for (const name of FOOD_NAMES) {
+    const card = document.querySelector(`#foodCards > .card[data-name="${CSS.escape(name)}"]`);
+    emitPair(name, card);
+  }
+  for (const name of DEATH_NAMES) {
+    const card = document.querySelector(`#deathCards > .card[data-name="${CSS.escape(name)}"]`);
+    emitPair(name, card);
+  }
+
+  for (const cat of ["join", "welcome"]) {
+    for (const time of ["morning", "midday", "evening", "night"]) {
+      const card = document.querySelector(`#greetingCards > .card[data-category="${cat}"][data-time="${time}"]`);
+      const label = "Greeting: " + titleCase(cat) + " / " + titleCase(time);
+      const enTa = card.querySelector(".lang-block.en .lines-area");
+      parts.push("[" + label + "]");
+      for (const l of linesFromTextarea(enTa)) parts.push(l);
+      parts.push("");
+
+      const localLabel = "Greeting (LOCAL): " + titleCase(cat) + " / " + titleCase(time);
+      const localTa = card.querySelector(".lang-block.local .lines-area");
+      parts.push("[" + localLabel + "]");
+      for (const l of linesFromTextarea(localTa)) parts.push(l);
+      parts.push("");
+    }
+  }
+
+  return parts.join("\n").trim() + "\n";
+}
+
+document.getElementById("generateBtn").addEventListener("click", () => {
+  document.getElementById("exportOutput").value = generateExport();
+});
+
+document.getElementById("copyBtn").addEventListener("click", async () => {
+  const output = document.getElementById("exportOutput");
+  if (!output.value.trim()) {
+    output.value = generateExport();
+  }
+  try {
+    await navigator.clipboard.writeText(output.value);
+  } catch (e) {
+    output.select();
+    document.execCommand("copy");
+  }
+  const fb = document.getElementById("copyFeedback");
+  fb.classList.add("show");
+  clearTimeout(fb._t);
+  fb._t = setTimeout(() => fb.classList.remove("show"), 1500);
+});
+
+// ---------------------------------------------------------------------
+// Import
+// ---------------------------------------------------------------------
+
+document.getElementById("importToggleBtn").addEventListener("click", (e) => {
+  const panel = document.getElementById("importPanel");
+  const open = panel.style.display !== "none";
+  panel.style.display = open ? "none" : "block";
+  e.target.textContent = (open ? "▸" : "▾") + " Load an existing export to edit it here instead";
+});
+
+// Mirrors the addon's own ParseExportText (RP_Options.lua): a "[Header]" line starts a
+// block, everything until the next header (or EOF) is that block's lines. A header of the
+// form "Name: CHATTYPE" splits into name+chatType only when CHATTYPE is a recognized value,
+// otherwise the whole bracket content is treated as a literal name with no chat type.
+function parseExportText(text) {
+  const lines = text.split(/\r?\n/);
+  const blocks = [];
+  let current = null;
+  for (const raw of lines) {
+    if (/^\s*#/.test(raw)) continue;
+    const headerMatch = raw.match(/^\[(.+)\]\s*$/);
+    if (headerMatch) {
+      if (current) blocks.push(current);
+      const header = headerMatch[1];
+      const ctMatch = header.match(/^(.*):\s*([A-Z_]+)\s*$/);
+      if (ctMatch && CHAT_TYPE_READ_SET.has(ctMatch[2])) {
+        current = { name: ctMatch[1].trim(), chatType: ctMatch[2], lines: [] };
+      } else {
+        current = { name: header.trim(), chatType: null, lines: [] };
+      }
+    } else if (current) {
+      const t = raw.trim();
+      if (t) current.lines.push(t);
+    }
+  }
+  if (current) blocks.push(current);
+  return blocks;
+}
+
+function applyToLangBlock(card, cls, block) {
+  const ta = card.querySelector(`.lang-block.${cls} .lines-area`);
+  ta.value = block.lines.join("\n");
+  ta.dispatchEvent(new Event("input"));
+  if (block.chatType) {
+    const sel = card.querySelector(`.lang-block.${cls} .ct-select`);
+    // PARTY/RAID from an older export have no equivalent in the current dropdown --
+    // leave the selector on its default rather than silently forcing an option that
+    // doesn't actually mean the same thing anymore (Party/Raid used to be static
+    // channels; Group Start/Success now auto-pick whichever you're actually in).
+    if (sel && CHAT_TYPES.some(ct => ct.key === block.chatType)) sel.value = block.chatType;
+  }
+}
+
+document.getElementById("loadBtn").addEventListener("click", () => {
+  const text = document.getElementById("importArea").value;
+  const blocks = parseExportText(text);
+  const statusEl = document.getElementById("importStatus");
+
+  if (blocks.length === 0) {
+    statusEl.textContent = "No [Section] headers found, nothing changed. Make sure you pasted a real export.";
+    return;
+  }
+
+  // Auto-detect which class this export is mostly for, and switch to it first.
+  const classVotes = {};
+  for (const b of blocks) {
+    const base = b.name.replace(/ \(LOCAL\)$/, "");
+    const cls = DATA.spellClass[base];
+    if (cls && cls !== "ALL") classVotes[cls] = (classVotes[cls] || 0) + 1;
+  }
+  let bestClass = null, bestCount = 0;
+  for (const c in classVotes) if (classVotes[c] > bestCount) { bestClass = c; bestCount = classVotes[c]; }
+  if (bestClass) {
+    document.getElementById("classSelect").value = bestClass;
+    renderClassCards(bestClass);
+  }
+
+  let applied = 0, skipped = [];
+
+  for (const b of blocks) {
+    const greetingLocalMatch = b.name.match(/^Greeting \(LOCAL\):\s*(.+)$/);
+    const greetingMatch = greetingLocalMatch || b.name.match(/^Greeting:\s*(.+)$/);
+    if (greetingMatch) {
+      const m = greetingMatch[1].match(/^(\w+)\s*\/\s*(\w+)$/);
+      if (!m) { skipped.push(b.name); continue; }
+      const cat = m[1].toLowerCase(), time = m[2].toLowerCase();
+      const card = document.querySelector(`#greetingCards > .card[data-category="${cat}"][data-time="${time}"]`);
+      if (!card) { skipped.push(b.name); continue; }
+      applyToLangBlock(card, greetingLocalMatch ? "local" : "en", b);
+      card.open = true;
+      applied++;
+      continue;
+    }
+
+    const isLocal = b.name.endsWith(" (LOCAL)");
+    const baseName = isLocal ? b.name.slice(0, -" (LOCAL)".length) : b.name;
+    let card = document.querySelector(`#classCards > .card[data-name="${CSS.escape(baseName)}"]`)
+      || document.querySelector(`#foodCards > .card[data-name="${CSS.escape(baseName)}"]`)
+      || document.querySelector(`#deathCards > .card[data-name="${CSS.escape(baseName)}"]`);
+    if (!card) { skipped.push(b.name); continue; }
+    applyToLangBlock(card, isLocal ? "local" : "en", b);
+    card.open = true;
+    applied++;
+  }
+
+  let msg = `Loaded ${applied} section${applied === 1 ? "" : "s"}.`;
+  if (skipped.length) msg += `\nSkipped (unrecognized): ${skipped.join(", ")}`;
+  statusEl.textContent = msg;
+});
+</script>
+</body>
+</html>

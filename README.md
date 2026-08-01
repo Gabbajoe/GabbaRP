@@ -20,7 +20,7 @@ Copy this folder to `World of Warcraft/_classic_era_/Interface/AddOns/GabbaRP` a
 - Spam protection you control: a per-skill cooldown, a global "minimum gap between any two lines" cooldown, and a percent chance a line actually fires once eligible, each with its own slider. Fast-recast skills (like Life Tap) automatically fall back to an "only every Nth cast" rule instead of a cooldown, so they don't go silent forever on a short timer. Every skill's editor also has its own "Reaction frequency" override: force a skill to always react (skip the cooldown/gate entirely) or to react only every Nth cast, regardless of the built-in default.
 - **Optional local-language support**: off by default. Turn on "Use local language" and fill in your own translated lines (via each Edit button's Language tab) to have your character speak your guild's language instead of English when the group is mostly guildmates. Falls back to English for anything you haven't translated yet.
 - Every line list is fully editable in-game: add, remove, or reset any skill's lines to default, per language.
-- Export/import your entire configuration as plain text, to back it up or share it with guildmates.
+- Export/import your entire configuration as plain text, to back it up or share it with guildmates. The **[Line Pack Builder](https://gabbajoe.github.io/GabbaRP/)** is a browser-based editor for this: write or translate lines for every skill in a proper full-size editor, then paste the generated export straight into the in-game Import box.
 - Built-in troubleshooting: `/gabbarp report` prints a copy-pasteable diagnostic summary, and per-feature debug logs help track down "why didn't this fire" reports.
 
 ## Slash commands

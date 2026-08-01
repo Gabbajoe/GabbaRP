@@ -17,9 +17,23 @@ jobs:
 
     steps:
       - name: Clone project
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Install Lua
+        run: sudo apt-get update && sudo apt-get install -y lua5.4
+
+      - name: Regenerate Line Pack Builder data
+        run: |
+          lua5.4 tools/generate-linepack-data.lua > docs/data.json
+          if ! git diff --quiet -- docs/data.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add docs/data.json
+            git commit -m "Regenerate Line Pack Builder data for ${GITHUB_REF_NAME}"
+            git push origin HEAD:main
+          fi
 
       - name: Package and release
         uses: BigWigsMods/packager@v2
