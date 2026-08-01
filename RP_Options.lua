@@ -1437,7 +1437,7 @@ end
 -- anyone behind sees every entry they missed concatenated, not just the latest.
 ----------------------------------------------------------------------
 
-local CHANGELOG_VERSION = 8
+local CHANGELOG_VERSION = 9
 -- Exposed so Core.lua's GabbaRP_EnsureDefaults can stamp brand-new characters as
 -- already-current (a fresh install has nothing to "catch up" on, so it shouldn't see a
 -- changelog immediately) without this file needing to load before that logic runs.
@@ -1477,6 +1477,10 @@ local CHANGELOG = {
         "|cffffd200New:|r Mind Control and Mind Vision now also whisper the target directly when successfully cast on a player, on top of their normal group-facing line. Mind Control against the opposing faction falls back to a Say translated through the Hermes addon if it's installed. Mind Vision against the opposing faction is always skipped. Both are skipped entirely against non-player targets.",
     [8] = "|cffffd200GabbaRP v1.0.7|r\n\n" ..
         "|cffffd200Fixed:|r a self-buff line (e.g. Demon Armor) could fire on its own right when zoning into an instance or through a portal, with no actual cast involved. The game can resend an \"aura applied\" event for a buff you already had up during a zone transition; that resync is now recognized and ignored instead of read as a fresh cast.",
+    [9] = "|cffffd200GabbaRP v1.0.8|r\n\n" ..
+        "|cffffd200Changed:|r every skill's default flavor line was rewritten. Most skills default to sending as an Emote, which prefixes your character's name, and a lot of the old lines read grammatically wrong once that name was added (\"Charlie embrace the void.\"). All of them now read correctly as a proper third-person emote, and several use %t to actually name the target where they didn't before.\n\n" ..
+        "|cffffd200Fixed:|r Export/Import silently dropped any skill set to the \"Group Success\" chat type, since that value was missing from the importer's list of recognized chat types.\n\n" ..
+        "|cffffd200New:|r the Line Pack Builder, a browser-based editor for composing or translating lines for every skill, Death Reaction, and Greeting outside the game, then exporting a block that pastes straight into the in-game Import box. https://gabbajoe.github.io/GabbaRP/",
 }
 
 local changelogFrame

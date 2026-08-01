@@ -1,4 +1,4 @@
-# GabbaRP - v1.0.7
+# GabbaRP - v1.0.8
 
 GabbaRP gives your character a voice. It listens for the spells you cast and, every so often, has your character say or emote something fitting in Say, Emote, Guild chat, or automatically to whichever of Party/Raid you're actually in: a Warrior taunting before a Charge, a Priest murmuring a prayer before Power Word: Shield, a Warlock's Imp mouthing off in Say chat. Every class is covered, every line is editable in-game, and nothing is sent to chat unless you're actually eligible to see it (no spamming a raid with your Rogue's inner monologue).
 
@@ -51,6 +51,12 @@ This only matters if you have a skill configured to send **Say** or **Yell** spe
 Found a skill that's missing a line, or one that should react but doesn't? Have an idea for a new feature? Open an issue on GitHub: **https://github.com/Gabbajoe/GabbaRP/issues**. Missing-skill reports are especially useful since there are hundreds of spells across 9 classes and it's easy for a niche one to slip through.
 
 ## Changelog
+
+### V1.0.8
+
+- Changed: every skill's default flavor line was rewritten. Most skills default to sending as an Emote, which prefixes your character's name, and a lot of the old lines read grammatically wrong once that name was added ("Charlie embrace the void."). All of them now read correctly as a proper third-person emote, and several use %t to actually name the target where they didn't before.
+- Fixed: Export/Import silently dropped any skill set to the "Group Success" chat type, since that value was missing from the importer's list of recognized chat types.
+- New: the [Line Pack Builder](https://gabbajoe.github.io/GabbaRP/), a browser-based editor for composing or translating lines for every skill, Death Reaction, and Greeting outside the game, then exporting a block that pastes straight into the in-game Import box.
 
 ### V1.0.7
 
