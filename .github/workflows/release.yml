@@ -35,5 +35,10 @@ jobs:
             git push origin HEAD:main
           fi
 
+      - name: Extract latest changelog section
+        run: |
+          awk '/^### /{c++} c==1{print} c==2{exit}' CHANGELOG.md > CHANGELOG-release.md
+          cat CHANGELOG-release.md
+
       - name: Package and release
         uses: BigWigsMods/packager@v2
