@@ -761,7 +761,22 @@ frame:SetScript("OnEvent", function(self, event, ...)
                 -- and could potentially stop it from notifying any callbacks registered
                 -- after ours in the same loop.
                 local ok, err = pcall(function()
-                    if inGuild and playerData and playerData.name then
+                    -- The legacy `inGuild` positional argument is only ever populated for
+                    -- peer-corroborated deaths (DeathNotificationLib~Cache.lua only sets it
+                    -- inside its "not auto_commit" branch) -- for a self-reported death
+                    -- (auto_commit = true, the common case: the dying player's own client
+                    -- reports it), inGuild stays nil even for an actual guildmate, and this
+                    -- reaction would silently never fire. PassesGuildFilterMode does a live
+                    -- check against playerData instead of trusting that stale flag, and is
+                    -- the library's own newer, documented-as-more-robust API for exactly
+                    -- this -- confirmed live: a same-guild, self-reported Hardcore death
+                    -- didn't trigger Death: Guild until this was added. Falls back to the
+                    -- old inGuild flag if an older DeathNotificationLib version is running.
+                    local isGuildmate = inGuild
+                    if DeathNotificationLib.PassesGuildFilterMode then
+                        isGuildmate = DeathNotificationLib.PassesGuildFilterMode(playerData, "guild_only")
+                    end
+                    if isGuildmate and playerData and playerData.name then
                         -- Always the local language when the master switch is on, unconditionally
                         -- otherwise -- this goes to GUILD chat, whose audience is the guild by
                         -- definition, so there's no group composition to measure (the person who
