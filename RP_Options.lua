@@ -1437,7 +1437,7 @@ end
 -- anyone behind sees every entry they missed concatenated, not just the latest.
 ----------------------------------------------------------------------
 
-local CHANGELOG_VERSION = 9
+local CHANGELOG_VERSION = 10
 -- Exposed so Core.lua's GabbaRP_EnsureDefaults can stamp brand-new characters as
 -- already-current (a fresh install has nothing to "catch up" on, so it shouldn't see a
 -- changelog immediately) without this file needing to load before that logic runs.
@@ -1481,6 +1481,8 @@ local CHANGELOG = {
         "|cffffd200Changed:|r every skill's default flavor line was rewritten. Most skills default to sending as an Emote, which prefixes your character's name, and a lot of the old lines read grammatically wrong once that name was added (\"Charlie embrace the void.\"). All of them now read correctly as a proper third-person emote, and several use %t to actually name the target where they didn't before.\n\n" ..
         "|cffffd200Fixed:|r Export/Import silently dropped any skill set to the \"Group Success\" chat type, since that value was missing from the importer's list of recognized chat types.\n\n" ..
         "|cffffd200New:|r the Line Pack Builder, a browser-based editor for composing or translating lines for every skill, Death Reaction, and Greeting outside the game, then exporting a block that pastes straight into the in-game Import box. https://gabbajoe.github.io/GabbaRP/",
+    [10] = "|cffffd200GabbaRP v1.0.9|r\n\n" ..
+        "|cffffd200Fixed:|r Death: Guild could silently never fire for a guildmate's death. DeathNotificationLib only reliably reports guild membership for peer-corroborated deaths; a self-reported death (the common case) left that flag unset even for an actual guildmate. Now checked live against your guild roster instead.",
 }
 
 local changelogFrame

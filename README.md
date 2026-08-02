@@ -1,4 +1,8 @@
-# GabbaRP - v1.0.8
+# GabbaRP - v1.0.9
+
+[![Release](https://github.com/Gabbajoe/GabbaRP/actions/workflows/release.yml/badge.svg)](https://github.com/Gabbajoe/GabbaRP/actions/workflows/release.yml)
+[![Latest Release](https://img.shields.io/github/v/release/Gabbajoe/GabbaRP)](https://github.com/Gabbajoe/GabbaRP/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/Gabbajoe/GabbaRP)](LICENSE.txt)
 
 GabbaRP gives your character a voice. It listens for the spells you cast and, every so often, has your character say or emote something fitting in Say, Emote, Guild chat, or automatically to whichever of Party/Raid you're actually in: a Warrior taunting before a Charge, a Priest murmuring a prayer before Power Word: Shield, a Warlock's Imp mouthing off in Say chat. Every class is covered, every line is editable in-game, and nothing is sent to chat unless you're actually eligible to see it (no spamming a raid with your Rogue's inner monologue).
 
@@ -51,6 +55,10 @@ This only matters if you have a skill configured to send **Say** or **Yell** spe
 Found a skill that's missing a line, or one that should react but doesn't? Have an idea for a new feature? Open an issue on GitHub: **https://github.com/Gabbajoe/GabbaRP/issues**. Missing-skill reports are especially useful since there are hundreds of spells across 9 classes and it's easy for a niche one to slip through.
 
 ## Changelog
+
+### V1.0.9
+
+- Fixed: Death: Guild could silently never fire for a guildmate's death. DeathNotificationLib only reliably reports guild membership for peer-corroborated deaths; a self-reported death (the common case) left that flag unset even for an actual guildmate. Now checked live against your guild roster instead.
 
 ### V1.0.8
 

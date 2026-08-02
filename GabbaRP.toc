@@ -2,7 +2,7 @@
 ## Title: GabbaRP
 ## Notes: Automatic roleplay emotes and flavor lines triggered by your spell casts. Fully editable in-game, for every class.
 ## Author: Nils
-## Version: 1.0.8
+## Version: 1.0.9
 ## Category-enUS: Roleplay, Chat
 ## IconTexture: Interface\AddOns\GabbaRP\Icon.png
 ## SavedVariablesPerCharacter: GabbaRPCharDB
