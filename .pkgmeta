@@ -3,3 +3,11 @@ ignore:
   - AGENTS.md
   - docs
   - tools
+
+# Without this, the packager auto-generates its own CHANGELOG.md from raw git commit
+# messages (including things like "Co-Authored-By" lines) and uses that same text as the
+# CurseForge release description -- using our own curated, player-facing changelog file
+# instead for both.
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
