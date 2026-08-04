@@ -129,14 +129,103 @@ end
 -- name-string lookup it was meant to replace. Your own guild roster has no such per-unit
 -- sync dependency, so this works the instant the party roster itself (just names, always
 -- reliable) is available.
--- Deliberately global (not local) -- RP_Greeting.lua, loaded after this file, reuses it
--- for the "welcome" greeting's per-target guild check too.
-function ns.GabbaRP_IsInPlayerGuild(name)
-    if not name then return false end
-    local shortName = name:match("^[^-]+")
+--
+-- GreenWall confederation support (opt-in, GabbaRPCharDB.rp.localLanguageGuildScope ==
+-- "guild_confederation"): reads GreenWall's own internal `gw` global directly, not its
+-- public GreenWallAPI (which only covers cross-guild messaging, no roster/membership
+-- query) -- same approach DeathNotificationLib's own GuildFilter module uses internally.
+-- Necessarily falls back to GetGuildInfo(unit) to learn a NON-guildmate's own guild name
+-- (there's no roster to scan for a guild you're not in), so this specific check inherits
+-- that same unreliability the roster-scan above exists to avoid -- accepted as a
+-- best-effort fallback for an opt-in feature, not the primary/default path.
+local function IsGreenWallConfederationGuild(guildName)
+    if not guildName or guildName == "" then
+        if GabbaRPCharDB.rp.greetDebugLog then
+            ns.GabbaRP_DebugLog("greeting", "IsGreenWallConfederationGuild: GetGuildInfo(unit) returned nil/empty")
+        end
+        return false
+    end
+    if type(gw) ~= "table" or type(gw.config) ~= "table" or not gw.config.peer then
+        if GabbaRPCharDB.rp.greetDebugLog then
+            ns.GabbaRP_DebugLog("greeting", string.format(
+                "IsGreenWallConfederationGuild: gw unavailable (gw=%s, gw.config=%s, gw.config.peer=%s), guildName=%s",
+                tostring(type(gw) == "table"), tostring(gw and type(gw.config) == "table"),
+                tostring(gw and gw.config and gw.config.peer ~= nil), tostring(guildName)))
+        end
+        return false
+    end
+    local shortGuild = guildName:match("^[^-]+") or guildName
+    local peers = {}
+    for _, peerName in pairs(gw.config.peer) do
+        local shortPeer = peerName and peerName:match("^[^-]+") or peerName
+        table.insert(peers, tostring(shortPeer))
+        if shortPeer == shortGuild then return true end
+    end
+    if GabbaRPCharDB.rp.greetDebugLog then
+        ns.GabbaRP_DebugLog("greeting", string.format(
+            "IsGreenWallConfederationGuild: %s not among peers [%s]",
+            tostring(shortGuild), table.concat(peers, ", ")))
+    end
+    return false
+end
+
+-- Guild and group-language caches keep combat-event handling independent from the size
+-- of the guild roster. Roster events only mark the cache stale; rebuilding is lazy and
+-- debounced, so event bursts never perform repeated full roster scans.
+local GUILD_CACHE_REBUILD_DELAY = 1
+local guildMemberNames = {}
+local guildCacheDirty = true
+local guildCacheInitialized = false
+local guildCacheRetryAt = 0
+local cachedGroupLanguage
+local cachedGroupLanguageSettings
+local groupLanguageDirty = true
+
+local function InvalidateGroupLanguage()
+    groupLanguageDirty = true
+end
+
+local function InvalidateGuildMemberCache()
+    guildCacheDirty = true
+    guildCacheRetryAt = GetTime() + GUILD_CACHE_REBUILD_DELAY
+    InvalidateGroupLanguage()
+end
+
+local function RebuildGuildMemberCache()
+    local members = {}
     for i = 1, GetNumGuildMembers() do
         local guildName = GetGuildRosterInfo(i)
-        if guildName and guildName:match("^[^-]+") == shortName then
+        local shortName = guildName and (guildName:match("^[^-]+") or guildName)
+        if shortName then members[shortName] = true end
+    end
+    guildMemberNames = members
+    guildCacheDirty = false
+    guildCacheInitialized = true
+end
+
+local function EnsureGuildMemberCache()
+    if not guildCacheDirty then return true end
+    if not guildCacheInitialized or GetTime() >= guildCacheRetryAt then
+        RebuildGuildMemberCache()
+        return true
+    end
+    return false
+end
+
+-- Deliberately global (not local) -- RP_Greeting.lua, loaded after this file, reuses it
+-- for the "welcome" greeting's per-target guild check too. `unit` is optional: only used
+-- for the GreenWall confederation fallback above, so callers without a resolvable unit
+-- token (or who don't care about confederation) can omit it and still get the reliable
+-- own-guild check.
+function ns.GabbaRP_IsInPlayerGuild(name, unit)
+    if not name then return false end
+    EnsureGuildMemberCache()
+    local shortName = name:match("^[^-]+") or name
+    if guildMemberNames[shortName] then return true end
+    if unit and GabbaRPCharDB.rp.localLanguageGuildScope == "guild_confederation" then
+        local unitGuild = GetGuildInfo(unit)
+        if not unitGuild then return false, true end
+        if IsGreenWallConfederationGuild(unitGuild) then
             return true
         end
     end
@@ -146,27 +235,44 @@ end
 -- Determines which language the RP module should currently speak: solo (nobody in a
 -- group to measure against) uses the configured GabbaRPCharDB.rp.soloLanguage; grouped
 -- play switches to the local language once more than half the party/raid shares your own
--- guild, English otherwise. Computed fresh at every trigger rather than cached once,
--- since group composition can change mid-session (people join/leave). Gated by
+-- guild, English otherwise. The result is cached and invalidated by roster events. Gated by
 -- localLanguageEnabled (off by default -- see Core.lua) since this addon ships
 -- English-only; the local language only ever fires once a user has both turned this on
 -- AND filled in their own translated lines.
 -- Deliberately global (not local) -- RP_Greeting.lua, loaded after this file, reuses it
 -- for the "join" greeting's language too.
 function ns.GabbaRP_GetGroupLanguage()
+    local settingsKey = tostring(GabbaRPCharDB.rp.localLanguageEnabled) .. "\031"
+        .. tostring(GabbaRPCharDB.rp.soloLanguage) .. "\031"
+        .. tostring(GabbaRPCharDB.rp.localLanguageGuildScope)
     if not GabbaRPCharDB.rp.localLanguageEnabled then
         return "en" -- master switch off -- skip the group/solo check entirely
     end
+    if not groupLanguageDirty and cachedGroupLanguage and cachedGroupLanguageSettings == settingsKey then
+        return cachedGroupLanguage
+    end
     if not (IsInGroup() or IsInRaid()) then
-        return GabbaRPCharDB.rp.soloLanguage or "en"
+        cachedGroupLanguage = GabbaRPCharDB.rp.soloLanguage or "en"
+        cachedGroupLanguageSettings = settingsKey
+        groupLanguageDirty = false
+        return cachedGroupLanguage
     end
     local playerGuild = GetGuildInfo("player")
     if not playerGuild then
         if GabbaRPCharDB.rp.greetDebugLog then
             ns.GabbaRP_DebugLog("greeting", "ns.GabbaRP_GetGroupLanguage: GetGuildInfo('player') returned nil -> en")
         end
-        return "en" -- no guild of your own, no "majority" to compute
+        -- Keep a transient player-guild lookup failure provisional; otherwise a real
+        -- guildless player can safely cache English.
+        if IsInGuild and IsInGuild() then return "en" end
+        cachedGroupLanguage = "en" -- no guild of your own, no "majority" to compute
+        cachedGroupLanguageSettings = settingsKey
+        groupLanguageDirty = false
+        return cachedGroupLanguage
     end
+
+    local rosterIsCurrent = EnsureGuildMemberCache()
+    local guildInfoPending = false
 
     local total, guildCount = 0, 0
     local debugParts = {}
@@ -177,7 +283,13 @@ function ns.GabbaRP_GetGroupLanguage()
             if UnitExists(unit) then
                 total = total + 1
                 local unitName = UnitName(unit)
-                local isGuildmate = unitName == UnitName("player") or ns.GabbaRP_IsInPlayerGuild(unitName)
+                local isGuildmate, pending
+                if unitName == UnitName("player") then
+                    isGuildmate = true
+                else
+                    isGuildmate, pending = ns.GabbaRP_IsInPlayerGuild(unitName, unit)
+                end
+                guildInfoPending = guildInfoPending or pending
                 if isGuildmate then
                     guildCount = guildCount + 1
                 end
@@ -195,7 +307,8 @@ function ns.GabbaRP_GetGroupLanguage()
             if UnitExists(unit) then
                 total = total + 1
                 local unitName = UnitName(unit)
-                local isGuildmate = ns.GabbaRP_IsInPlayerGuild(unitName)
+                local isGuildmate, pending = ns.GabbaRP_IsInPlayerGuild(unitName, unit)
+                guildInfoPending = guildInfoPending or pending
                 if isGuildmate then
                     guildCount = guildCount + 1
                 end
@@ -212,6 +325,13 @@ function ns.GabbaRP_GetGroupLanguage()
         ns.GabbaRP_DebugLog("greeting", string.format(
             "ns.GabbaRP_GetGroupLanguage: playerGuild=%s guildCount=%d/%d -> %s | %s",
             tostring(playerGuild), guildCount, total, result, table.concat(debugParts, ", ")))
+    end
+    -- A missing unit guild on the optional GreenWall path may arrive shortly after the
+    -- group event. Keep this result provisional instead of caching a false negative.
+    if rosterIsCurrent and not guildInfoPending then
+        cachedGroupLanguage = result
+        cachedGroupLanguageSettings = settingsKey
+        groupLanguageDirty = false
     end
     return result
 end
@@ -277,6 +397,9 @@ frame:RegisterEvent("CHAT_MSG_MONSTER_SAY")
 frame:RegisterEvent("CHAT_MSG_MONSTER_YELL")
 frame:RegisterEvent("UNIT_SPELLCAST_START")
 frame:RegisterEvent("UNIT_AURA")
+frame:RegisterEvent("GUILD_ROSTER_UPDATE")
+frame:RegisterEvent("PLAYER_GUILD_UPDATE")
+frame:RegisterEvent("GROUP_ROSTER_UPDATE")
 
 -- /gabbarp triggerdebug -- explains why TriggerLine did or didn't produce a line for a
 -- given skill, e.g. for "this skill never comments" reports. A no-op call when the flag
@@ -743,7 +866,14 @@ local function WarnIfSayYellConfigured()
 end
 
 frame:SetScript("OnEvent", function(self, event, ...)
-    if event == "PLAYER_LOGIN" then
+    if event == "GUILD_ROSTER_UPDATE" or event == "PLAYER_GUILD_UPDATE" then
+        InvalidateGuildMemberCache()
+        return
+    elseif event == "GROUP_ROSTER_UPDATE" then
+        InvalidateGroupLanguage()
+        return
+    elseif event == "PLAYER_LOGIN" then
+        InvalidateGuildMemberCache()
         playerGUID = UnitGUID("player")
         WarnIfSayYellConfigured()
 
@@ -774,7 +904,8 @@ frame:SetScript("OnEvent", function(self, event, ...)
                     -- old inGuild flag if an older DeathNotificationLib version is running.
                     local isGuildmate = inGuild
                     if DeathNotificationLib.PassesGuildFilterMode then
-                        isGuildmate = DeathNotificationLib.PassesGuildFilterMode(playerData, "guild_only")
+                        local filterMode = GabbaRPCharDB.rp.deathGuildFilterMode or "guild_only"
+                        isGuildmate = DeathNotificationLib.PassesGuildFilterMode(playerData, filterMode)
                     end
                     if isGuildmate and playerData and playerData.name then
                         -- Always the local language when the master switch is on, unconditionally

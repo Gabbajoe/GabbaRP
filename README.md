@@ -1,4 +1,4 @@
-# GabbaRP - v1.0.9
+# GabbaRP - v1.0.10
 
 [![Release](https://github.com/Gabbajoe/GabbaRP/actions/workflows/release.yml/badge.svg)](https://github.com/Gabbajoe/GabbaRP/actions/workflows/release.yml)
 [![Latest Release](https://img.shields.io/github/v/release/Gabbajoe/GabbaRP)](https://github.com/Gabbajoe/GabbaRP/releases/latest)
@@ -55,5 +55,8 @@ This only matters if you have a skill configured to send **Say** or **Yell** spe
 Found a skill that's missing a line, or one that should react but doesn't? Have an idea for a new feature? Open an issue on GitHub: **https://github.com/Gabbajoe/GabbaRP/issues**. Missing-skill reports are especially useful since there are hundreds of spells across 9 classes and it's easy for a niche one to slip through.
 
 ## Changelog
+
+Latest: **v1.0.10** caches local-language guild/group lookups, eliminating repeated
+full guild-roster scans during spell-trigger processing.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full version history.

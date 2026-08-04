@@ -153,18 +153,55 @@ local function DoSayLine(category, timeOfDay, name, lang)
     end
 end
 
+-- SnapshotMembers only tracks names, not unit tokens (a plain name set is all the
+-- roster-diffing below needs) -- resolved fresh here instead, only for the one case
+-- (GreenWall confederation fallback) that actually needs a unit token, rather than
+-- changing SnapshotMembers' shape for every caller.
+local function ResolveGroupUnit(name)
+    local shortName = name and (name:match("^[^-]+") or name)
+    if not shortName then return nil end
+    if IsInRaid() then
+        for i = 1, GetNumGroupMembers() do
+            local unit = "raid" .. i
+            if UnitExists(unit) then
+                local unitName = UnitName(unit)
+                if unitName and unitName:match("^[^-]+") == shortName then return unit end
+            end
+        end
+    elseif IsInGroup() then
+        for i = 1, GetNumGroupMembers() - 1 do
+            local unit = "party" .. i
+            if UnitExists(unit) then
+                local unitName = UnitName(unit)
+                if unitName and unitName:match("^[^-]+") == shortName then return unit end
+            end
+        end
+    end
+    return nil
+end
+
 -- "welcome" (a specific new member joining a group you're already in) uses THAT player's
 -- own guild membership -- a non-guildmate joining a mostly-local-language group still
 -- gets welcomed in English. "join" (the whole-group greeting when you yourself join) has
 -- no single target to check, so it follows the overall group's guild-majority instead
 -- (ns.GabbaRP_GetGroupLanguage, RP_Core.lua). Both gated by the localLanguageEnabled master switch.
+--
+-- The GreenWall confederation fallback (ns.GabbaRP_IsInPlayerGuild's `unit` argument,
+-- RP_Core.lua) is a known best-effort here specifically: GetGuildInfo(unit) only works
+-- once that unit's info has actually loaded, the same proximity Blizzard uses for a
+-- party member's portrait to load -- confirmed live that retrying with a delay doesn't
+-- help when the real cause is distance, not sync timing, so this doesn't retry. The
+-- group-majority check (ns.GabbaRP_GetGroupLanguage) doesn't have this problem in
+-- practice, since it re-evaluates on every trigger rather than once at join time.
 local function SayLine(category, timeOfDay, name)
     if category == "welcome" and name then
-        local lang = (GabbaRPCharDB.rp.localLanguageEnabled and ns.GabbaRP_IsInPlayerGuild(name)) and "local" or "en"
+        local unit = ResolveGroupUnit(name)
+        local isGuildmate = GabbaRPCharDB.rp.localLanguageEnabled and ns.GabbaRP_IsInPlayerGuild(name, unit)
+        local lang = isGuildmate and "local" or "en"
         if GabbaRPCharDB.rp.greetDebugLog then
             ns.GabbaRP_DebugLog("greeting", string.format(
-                "welcome: name=%s isGuildmate=%s -> %s",
-                tostring(name), tostring(ns.GabbaRP_IsInPlayerGuild(name)), lang))
+                "welcome: name=%s unit=%s isGuildmate=%s -> %s",
+                tostring(name), tostring(unit), tostring(isGuildmate), lang))
         end
         DoSayLine(category, timeOfDay, name, lang)
         return

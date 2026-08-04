@@ -95,6 +95,12 @@ local CHAR_DB_DEFAULTS = {
         -- announced twice. On by default; uncheck to always get the group/raid reaction
         -- regardless.
         suppressGroupRaidIfGuild = true,
+        -- Which deaths count as "guild" for the Death: Guild reaction, passed straight
+        -- through to DeathNotificationLib.PassesGuildFilterMode (RP_Core.lua). "guild_only"
+        -- (default) is just your own guild; "guild_confederation" also counts GreenWall
+        -- co-guilds (only offered in the UI if GreenWall is actually detected). See
+        -- RP_Options.lua's Death Reactions section for the picker.
+        deathGuildFilterMode = "guild_only",
         -- Off by default -- noisy, prints on every nearby monster Say/Yell (not just your
         -- own Imp's), meant only for troubleshooting "Imp Backtalk doesn't fire" reports.
         -- /gabbarp impdebug on|off.
@@ -119,6 +125,11 @@ local CHAR_DB_DEFAULTS = {
         -- Grouped play instead picks local/English based on how much of the group
         -- shares your guild -- see ns.GabbaRP_GetGroupLanguage in RP_Core.lua. "en" | "local".
         soloLanguage = "en",
+        -- Whether the group/welcome guild-membership checks that drive local-language
+        -- selection also count GreenWall confederation co-guilds as "your guild", not just
+        -- your own exact guild. "guild_only" (default) | "guild_confederation". Only
+        -- offered in the UI (RP_Options.lua) when GreenWall is actually detected.
+        localLanguageGuildScope = "guild_only",
     },
     greetings = {
         enabled = true,

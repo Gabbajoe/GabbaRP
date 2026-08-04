@@ -887,6 +887,32 @@ function ns.GabbaRP_BuildGeneralPanel(parent)
 
     prevAnchor = useLocalDesc
 
+    -- Only shown when GreenWall is actually detected -- checked directly against
+    -- GreenWall's own `gw` global (same as ns.GabbaRP_IsInPlayerGuild's confederation
+    -- fallback, RP_Core.lua), deliberately NOT through DeathNotificationLib -- this
+    -- feature stays independent of that addon, unlike the separate Death: Guild picker
+    -- above which needs it either way. Without GreenWall there's no confederation to
+    -- opt into, so a picker with a single option would just be clutter. Best-effort:
+    -- unlike the own-guild check, this leans on GetGuildInfo(unit) to learn a
+    -- non-guildmate's own guild, which this addon has already confirmed can
+    -- occasionally return nil for a real, already-grouped unit.
+    local localGuildScopeTabs
+    if type(gw) == "table" and type(gw.config) == "table" then
+        local localGuildScopeLabel = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        localGuildScopeLabel:SetPoint("TOPLEFT", useLocalDesc, "BOTTOMLEFT", 0, -6)
+        localGuildScopeLabel:SetText("Local source:")
+
+        localGuildScopeTabs = GabbaRP_NewTabStrip(f, {
+            { key = "guild_only", label = "Guild Only", width = 90 },
+            { key = "guild_confederation", label = "Guild + Confederation", width = 150 },
+        }, function(key)
+            GabbaRPCharDB.rp.localLanguageGuildScope = key
+            GabbaRP_SyncTabStrip(localGuildScopeTabs, key)
+        end)
+        localGuildScopeTabs[1].btn:SetPoint("LEFT", localGuildScopeLabel, "RIGHT", 6, 0)
+        prevAnchor = localGuildScopeLabel
+    end
+
     local languageCheckboxes = {}
     local function SetSoloLanguage(lang)
         GabbaRPCharDB.rp.soloLanguage = lang
@@ -1064,8 +1090,33 @@ function ns.GabbaRP_BuildGeneralPanel(parent)
     deathGuildEditBtn:SetText("Edit")
     deathGuildEditBtn:SetScript("OnClick", function() ShowLineEditor("Death: Guild", true) end)
 
+    -- Only shown when GreenWall is actually detected -- DeathNotificationLib.
+    -- GetGuildFilterModeOptions only includes "guild_confederation" as an option in that
+    -- case, and without GreenWall there's nothing to actually choose between (your own
+    -- guild is the only guild there is), so a picker with one option would just be clutter.
+    local guildFilterAnchor = deathGuildCB
+    local guildFilterTabs
+    if DeathNotificationLib and DeathNotificationLib.GetGuildFilterModeOptions then
+        local options = DeathNotificationLib.GetGuildFilterModeOptions(true)
+        if options["guild_confederation"] then
+            local guildFilterLabel = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            guildFilterLabel:SetPoint("TOPLEFT", deathGuildCB, "BOTTOMLEFT", 20, -6)
+            guildFilterLabel:SetText("Count deaths from:")
+
+            guildFilterTabs = GabbaRP_NewTabStrip(f, {
+                { key = "guild_only", label = "Guild Only", width = 90 },
+                { key = "guild_confederation", label = "Guild + Confederation", width = 150 },
+            }, function(key)
+                GabbaRPCharDB.rp.deathGuildFilterMode = key
+                GabbaRP_SyncTabStrip(guildFilterTabs, key)
+            end)
+            guildFilterTabs[1].btn:SetPoint("LEFT", guildFilterLabel, "RIGHT", 6, 0)
+            guildFilterAnchor = guildFilterLabel
+        end
+    end
+
     local suppressGroupRaidCB = GabbaRP_NewCheckbox(f, "Skip group/raid chat if they were also in your guild")
-    suppressGroupRaidCB:SetPoint("TOPLEFT", deathGuildCB, "BOTTOMLEFT", 0, -4)
+    suppressGroupRaidCB:SetPoint("TOPLEFT", guildFilterAnchor, "BOTTOMLEFT", guildFilterAnchor == deathGuildCB and 0 or -20, -4)
     suppressGroupRaidCB:SetScript("OnClick", function(self)
         GabbaRPCharDB.rp.suppressGroupRaidIfGuild = self:GetChecked() and true or false
     end)
@@ -1165,12 +1216,18 @@ function ns.GabbaRP_BuildGeneralPanel(parent)
         animCB:SetChecked(db.anim)
         greetingsCB:SetChecked(GabbaRPCharDB.greetings.enabled)
         useLocalCB:SetChecked(db.localLanguageEnabled)
+        if localGuildScopeTabs then
+            GabbaRP_SyncTabStrip(localGuildScopeTabs, db.localLanguageGuildScope or "guild_only")
+        end
         foodCB:SetChecked(not db.disabledSpells["Food"])
         drinkCB:SetChecked(not db.disabledSpells["Drink"])
         comboCB:SetChecked(not db.disabledSpells["Food and Drink"])
         deathGroupCB:SetChecked(not db.disabledSpells["Death: Group"])
         deathRaidCB:SetChecked(not db.disabledSpells["Death: Raid"])
         deathGuildCB:SetChecked(not db.disabledSpells["Death: Guild"])
+        if guildFilterTabs then
+            GabbaRP_SyncTabStrip(guildFilterTabs, db.deathGuildFilterMode or "guild_only")
+        end
         suppressGroupRaidCB:SetChecked(db.suppressGroupRaidIfGuild)
         perSkillSlider:SetValue(db.perSkillCooldown or ns.GRP_DEFAULT_PER_SKILL_COOLDOWN)
         cooldownSlider:SetValue(db.globalCooldown or ns.GRP_DEFAULT_GLOBAL_COOLDOWN)
@@ -1437,7 +1494,7 @@ end
 -- anyone behind sees every entry they missed concatenated, not just the latest.
 ----------------------------------------------------------------------
 
-local CHANGELOG_VERSION = 10
+local CHANGELOG_VERSION = 11
 -- Exposed so Core.lua's GabbaRP_EnsureDefaults can stamp brand-new characters as
 -- already-current (a fresh install has nothing to "catch up" on, so it shouldn't see a
 -- changelog immediately) without this file needing to load before that logic runs.
@@ -1483,6 +1540,9 @@ local CHANGELOG = {
         "|cffffd200New:|r the Line Pack Builder, a browser-based editor for composing or translating lines for every skill, Death Reaction, and Greeting outside the game, then exporting a block that pastes straight into the in-game Import box. https://gabbajoe.github.io/GabbaRP/",
     [10] = "|cffffd200GabbaRP v1.0.9|r\n\n" ..
         "|cffffd200Fixed:|r Death: Guild could silently never fire for a guildmate's death. DeathNotificationLib only reliably reports guild membership for peer-corroborated deaths; a self-reported death (the common case) left that flag unset even for an actual guildmate. Now checked live against your guild roster instead.",
+    [11] = "|cffffd200GabbaRP v1.0.10|r\n\n" ..
+        "|cffffd200Changed:|r local-language guild membership and the group-language result are now cached. Spell reactions no longer rescan the full guild roster on every trigger; group and guild changes safely refresh the cache when needed.\n\n" ..
+        "|cffffd200Fixed:|r temporary missing guild data while a group is forming, including the optional GreenWall confederation check, is retried instead of being remembered as English.",
 }
 
 local changelogFrame

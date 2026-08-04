@@ -1,5 +1,15 @@
 # GabbaRP Changelog
 
+### V1.0.10
+
+- Changed: local-language guild membership and the resulting group-language decision are
+  now cached instead of rescanning the complete guild roster for every eligible spell
+  trigger. Guild/group roster events only invalidate the cache; a delayed, on-demand
+  rebuild coalesces bursts of roster updates without a client hitch.
+- Fixed: a short-lived missing guild lookup on a newly formed group or the optional
+  GreenWall confederation path is kept provisional and retried instead of being cached as
+  an incorrect English result.
+
 ### V1.0.9
 
 - Fixed: Death: Guild could silently never fire for a guildmate's death. DeathNotificationLib only reliably reports guild membership for peer-corroborated deaths; a self-reported death (the common case) left that flag unset even for an actual guildmate. Now checked live against your guild roster instead.
